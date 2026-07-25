@@ -272,14 +272,9 @@ class DualPlayerEngine @Inject constructor(
 
     private var onPlayerAboutToBeReleasedListener: ((Player) -> Unit)? = null
 
-    private fun buildAudioProcessorChain(): Array<com.google.android.exoplayer2.audio.AudioProcessor> {
-        val processors = mutableListOf<com.google.android.exoplayer2.audio.AudioProcessor>()
-        
-        // Add DynamicBassProcessor if available
-        dynamicBassManager.getProcessor()?.let {
-            processors.add(it)
-        }
-        
+    private fun buildAudioProcessorChain(): Array<androidx.media3.common.audio.AudioProcessor> {
+        val processors = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+        dynamicBassManager.getProcessor()?.let { processors.add(it) }
         return processors.toTypedArray()
     }
 
@@ -1050,11 +1045,6 @@ class DualPlayerEngine @Inject constructor(
     private fun buildPlayer(): ExoPlayer {
         // Create custom audio sink with processors
         val audioProcessors = buildAudioProcessorChain()
-        
-        val audioSink = DefaultAudioSink(
-            audioCapabilities = /* existing */,
-            audioProcessors = audioProcessors // ADDED
-        )
         
         val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
             val decoderInfos = MediaCodecSelector.DEFAULT.getDecoderInfos(
