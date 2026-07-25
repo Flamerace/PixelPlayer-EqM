@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.data.equalizer.EqualizerManager
 import com.theveloper.pixelplay.data.equalizer.EqualizerPreset
+import com.theveloper.pixelplay.data.equalizer.DynamicBassManager
 import com.theveloper.pixelplay.data.preferences.EqualizerPreferencesRepository
 import com.theveloper.pixelplay.data.preferences.EqualizerViewMode
-import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +48,15 @@ data class EqualizerUiState(
     val isLoudnessDismissed: Boolean = false,
     val customPresets: List<EqualizerPreset> = emptyList(), // Added
     val pinnedPresetsNames: List<String> = emptyList(), // Added
+    // DynamicBass state
+    val dynamicBassEnabled: Boolean = false,
+    val dynamicBassBassGain: Float = 0.5f,
+    val dynamicBassFilterXLow: Float = 50f,
+    val dynamicBassFilterXHigh: Float = 250f,
+    val dynamicBassFilterYLow: Float = 20f,
+    val dynamicBassFilterYHigh: Float = 200f,
+    val dynamicBassSideGainX: Float = 0f,
+    val dynamicBassSideGainY: Float = 0f,
 ) {
     // Computed property for accessible presets (Pinned)
     val accessiblePresets: List<EqualizerPreset>
@@ -69,6 +78,7 @@ data class EqualizerUiState(
 class EqualizerViewModel @Inject constructor(
     private val equalizerManager: EqualizerManager,
     private val equalizerPreferencesRepository: EqualizerPreferencesRepository,
+    private val dynamicBassManager: DynamicBassManager,
     private val dualPlayerEngine: DualPlayerEngine,
     @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
@@ -95,6 +105,7 @@ class EqualizerViewModel @Inject constructor(
     private var persistBassBoostJob: Job? = null
     private var persistVirtualizerJob: Job? = null
     private var persistLoudnessJob: Job? = null
+    private var persistDynamicBassJob: Job? = null
     
     init {
         initializeEqualizer()
@@ -155,6 +166,10 @@ class EqualizerViewModel @Inject constructor(
                 Timber.tag(TAG).d("Equalizer already attached by service, skipping restore.")
             }
             
+            // Initialize DynamicBass
+            val sampleRate = dualPlayerEngine.currentAudioFormatSnapshot()?.sampleRate ?: 44100
+            dynamicBassManager.initializeProcessor(sampleRate)
+            
             // Update UI state with device capabilities
             _uiState.value = _uiState.value.copy(
                 isBassBoostSupported = equalizerManager.isBassBoostSupported(),
@@ -193,7 +208,15 @@ class EqualizerViewModel @Inject constructor(
                 equalizerPreferencesRepository.loudnessDismissedFlow,
                 equalizerPreferencesRepository.equalizerViewModeFlow,
                 equalizerPreferencesRepository.customPresetsFlow, // Added
-                equalizerPreferencesRepository.pinnedPresetsFlow // Added
+                equalizerPreferencesRepository.pinnedPresetsFlow, // Added
+                equalizerPreferencesRepository.dynamicBassEnabledFlow,
+                equalizerPreferencesRepository.dynamicBassBassGainFlow,
+                equalizerPreferencesRepository.dynamicBassFilterXLowFlow,
+                equalizerPreferencesRepository.dynamicBassFilterXHighFlow,
+                equalizerPreferencesRepository.dynamicBassFilterYLowFlow,
+                equalizerPreferencesRepository.dynamicBassFilterYHighFlow,
+                equalizerPreferencesRepository.dynamicBassSideGainXFlow,
+                equalizerPreferencesRepository.dynamicBassSideGainYFlow
             ) { values -> // Too many args for standard destructuring, use array/list access
                  val enabled = values[0] as Boolean
                  val presetName = values[1] as String
@@ -212,6 +235,15 @@ class EqualizerViewModel @Inject constructor(
                  val viewMode = values[12] as EqualizerViewMode
                  val customPresets = (values[13] as? List<*>)?.filterIsInstance<EqualizerPreset>() ?: emptyList()
                  val pinnedPresets = (values[14] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                 // DynamicBass values
+                 val dbEnabled = values[15] as Boolean
+                 val dbGain = values[16] as Float
+                 val dbFilterXLow = values[17] as Float
+                 val dbFilterXHigh = values[18] as Float
+                 val dbFilterYLow = values[19] as Float
+                 val dbFilterYHigh = values[20] as Float
+                 val dbSideGainX = values[21] as Float
+                 val dbSideGainY = values[22] as Float
 
                 val currentPreset = if (presetName == "custom") {
                     EqualizerPreset.custom(customBands)
@@ -242,7 +274,16 @@ class EqualizerViewModel @Inject constructor(
                     // Capabilities (Keep existing values)
                     isBassBoostSupported = _uiState.value.isBassBoostSupported,
                     isVirtualizerSupported = _uiState.value.isVirtualizerSupported,
-                    isLoudnessEnhancerSupported = _uiState.value.isLoudnessEnhancerSupported
+                    isLoudnessEnhancerSupported = _uiState.value.isLoudnessEnhancerSupported,
+                    // DynamicBass state
+                    dynamicBassEnabled = dbEnabled,
+                    dynamicBassBassGain = dbGain,
+                    dynamicBassFilterXLow = dbFilterXLow,
+                    dynamicBassFilterXHigh = dbFilterXHigh,
+                    dynamicBassFilterYLow = dbFilterYLow,
+                    dynamicBassFilterYHigh = dbFilterYHigh,
+                    dynamicBassSideGainX = dbSideGainX,
+                    dynamicBassSideGainY = dbSideGainY
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -477,6 +518,72 @@ class EqualizerViewModel @Inject constructor(
             equalizerPreferencesRepository.setPinnedPresets(currentPinned)
         }
     }
+
+    // DynamicBass control methods
+    fun setDynamicBassEnabled(enabled: Boolean) {
+        dynamicBassManager.setEnabled(enabled)
+        _uiState.update { current ->
+            current.copy(dynamicBassEnabled = enabled)
+        }
+        viewModelScope.launch {
+            val sampleRate = dualPlayerEngine.currentAudioFormatSnapshot()?.sampleRate ?: 44100
+            dynamicBassManager.initializeProcessor(sampleRate)
+            equalizerPreferencesRepository.setDynamicBassEnabled(enabled)
+        }
+    }
+
+    fun setDynamicBassBassGain(gain: Float) {
+        val clampedGain = gain.coerceIn(0f, 1f)
+        dynamicBassManager.setBassGain(clampedGain)
+        _uiState.update { current ->
+            current.copy(dynamicBassBassGain = clampedGain)
+        }
+
+        persistDynamicBassJob?.cancel()
+        persistDynamicBassJob = viewModelScope.launch {
+            delay(SLIDER_PERSIST_DEBOUNCE_MS)
+            equalizerPreferencesRepository.setDynamicBassBassGain(clampedGain)
+        }
+    }
+
+    fun setDynamicBassFilterX(low: Float, high: Float) {
+        dynamicBassManager.setFilterXPassFrequency(low, high)
+        _uiState.update { current ->
+            current.copy(dynamicBassFilterXLow = low, dynamicBassFilterXHigh = high)
+        }
+
+        persistDynamicBassJob?.cancel()
+        persistDynamicBassJob = viewModelScope.launch {
+            delay(SLIDER_PERSIST_DEBOUNCE_MS)
+            equalizerPreferencesRepository.setDynamicBassFilterX(low, high)
+        }
+    }
+
+    fun setDynamicBassFilterY(low: Float, high: Float) {
+        dynamicBassManager.setFilterYPassFrequency(low, high)
+        _uiState.update { current ->
+            current.copy(dynamicBassFilterYLow = low, dynamicBassFilterYHigh = high)
+        }
+
+        persistDynamicBassJob?.cancel()
+        persistDynamicBassJob = viewModelScope.launch {
+            delay(SLIDER_PERSIST_DEBOUNCE_MS)
+            equalizerPreferencesRepository.setDynamicBassFilterY(low, high)
+        }
+    }
+
+    fun setDynamicBassSideGain(gx: Float, gy: Float) {
+        dynamicBassManager.setSideGain(gx, gy)
+        _uiState.update { current ->
+            current.copy(dynamicBassSideGainX = gx, dynamicBassSideGainY = gy)
+        }
+
+        persistDynamicBassJob?.cancel()
+        persistDynamicBassJob = viewModelScope.launch {
+            delay(SLIDER_PERSIST_DEBOUNCE_MS)
+            equalizerPreferencesRepository.setDynamicBassSideGain(gx, gy)
+        }
+    }
     
     /**
      * Reattaches the equalizer to a new audio session.
@@ -503,6 +610,12 @@ class EqualizerViewModel @Inject constructor(
                 equalizerPreferencesRepository.setVirtualizerStrength(latest.virtualizerStrength.toInt().coerceIn(0, 1000))
                 equalizerPreferencesRepository.setLoudnessEnhancerEnabled(latest.loudnessEnhancerEnabled)
                 equalizerPreferencesRepository.setLoudnessEnhancerStrength(latest.loudnessEnhancerStrength.toInt().coerceIn(0, 1000))
+                // DynamicBass persistence
+                equalizerPreferencesRepository.setDynamicBassEnabled(latest.dynamicBassEnabled)
+                equalizerPreferencesRepository.setDynamicBassBassGain(latest.dynamicBassBassGain)
+                equalizerPreferencesRepository.setDynamicBassFilterX(latest.dynamicBassFilterXLow, latest.dynamicBassFilterXHigh)
+                equalizerPreferencesRepository.setDynamicBassFilterY(latest.dynamicBassFilterYLow, latest.dynamicBassFilterYHigh)
+                equalizerPreferencesRepository.setDynamicBassSideGain(latest.dynamicBassSideGainX, latest.dynamicBassSideGainY)
             }.onFailure { error ->
                 Timber.tag(TAG).w(error, "Failed to flush equalizer state during onCleared")
             }
@@ -514,6 +627,7 @@ class EqualizerViewModel @Inject constructor(
         persistBassBoostJob?.cancel()
         persistVirtualizerJob?.cancel()
         persistLoudnessJob?.cancel()
+        persistDynamicBassJob?.cancel()
         persistLatestStateAsync()
         super.onCleared()
         // Don't release equalizer here - it should persist across screen navigation
