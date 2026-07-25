@@ -1068,19 +1068,19 @@ class DualPlayerEngine @Inject constructor(
                 processors.add(SurroundDownmixProcessor())
 
                 // 2. Add the dynamic bass processor (if present)
-                //dynamicBassManager.getProcessor()?.let { processors.add(it) }
+                dynamicBassManager.getProcessor()?.let { processors.add(it) }
                 
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(hiFiModeEnabled)
                     .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-                    .setAudioProcessorChain(
+                    /*.setAudioProcessorChain(
                         DefaultAudioSink.DefaultAudioProcessorChain(
                             HiResSampleRateCapAudioProcessor(),
                             SurroundDownmixProcessor(),
-                            dynamicBassManager.getProcessor()?
+                            //dynamicBassManager.getProcessor()?
                         )
-                    )
-                    //.setAudioProcessors(processors.toTypedArray())   // <-- add .toTypedArray()
+                    )*/
+                    .setAudioProcessors(processors.toTypedArray())   // <-- add .toTypedArray()
                     .build()
             }
 
