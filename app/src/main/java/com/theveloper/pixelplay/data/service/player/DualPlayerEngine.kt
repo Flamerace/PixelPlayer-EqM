@@ -1079,7 +1079,7 @@ class DualPlayerEngine @Inject constructor(
                             SurroundDownmixProcessor()
                         )
                     )*/
-                    .setAudioProcessors(processors)
+                    .setAudioProcessors(processors.toTypedArray())   // <-- add .toTypedArray()
                     .build()
             }
 
