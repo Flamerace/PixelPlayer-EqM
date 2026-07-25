@@ -80,11 +80,9 @@ class DynamicBassProcessor(
 
 package com.theveloper.pixelplay.data.equalizer
 
-import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.AudioFormat          // <-- ADD THIS
 import androidx.media3.common.audio.BaseAudioProcessor
-import androidx.media3.common.AudioFormat
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 class DynamicBassProcessor(
     private val sampleRate: Int
@@ -99,13 +97,14 @@ class DynamicBassProcessor(
     fun setFilterY(low: Float, high: Float) = engine.setFilterYPassFrequency(low, high)
     fun setSideGain(gx: Float, gy: Float) = engine.setSideGain(gx, gy)
 
-    // Media3: configure takes input and output formats, returns the output format (or null to reject)
+    // --- Media3 requires these two methods with these exact signatures ---
+
     override fun configure(inputFormat: AudioFormat, outputFormat: AudioFormat): AudioFormat? {
-        // We only support 16-bit PCM stereo
+        // Only process 16-bit PCM stereo
         if (inputFormat.pcmEncoding != AudioFormat.ENCODING_PCM_16BIT || inputFormat.channelCount != 2) {
             return null
         }
-        // We can pass through the same format (or you can return a new one if you change sample rate)
+        // Return the same format (or you can build a new one if you change anything)
         return AudioFormat.Builder()
             .setSampleRate(inputFormat.sampleRate)
             .setChannelCount(inputFormat.channelCount)
@@ -113,7 +112,6 @@ class DynamicBassProcessor(
             .build()
     }
 
-    // Media3: process reads from inputBuffer and writes to outputBuffer
     override fun process(inputBuffer: ByteBuffer, outputBuffer: ByteBuffer): Boolean {
         if (!isEnabled) {
             // Bypass: copy input to output unchanged
@@ -149,9 +147,10 @@ class DynamicBassProcessor(
         return true
     }
 
-    // queueInput is already implemented in BaseAudioProcessor – no need to override,
-    // but if your version requires it, you can add:
-    // override fun queueInput(inputBuffer: ByteBuffer) = super.queueInput(inputBuffer)
+    // If your version of BaseAudioProcessor still requires queueInput, add this:
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        super.queueInput(inputBuffer)
+    }
 
-    // reset is final – remove the override.
+    // reset() is final in BaseAudioProcessor – do NOT override it.
 }
