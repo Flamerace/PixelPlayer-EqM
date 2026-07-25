@@ -6,27 +6,27 @@ import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 
 class DynamicBassProcessor(
-    private val sampleRate: Int
-) : BaseAudioProcessor() {
-
-    private val engine = DynamicBassEngine(sampleRate.toFloat())
+    private var engine = DynamicBassEngine(44100f) // placeholder until real format arrives
     private var isEnabled = true
+    // cache last-set values so they survive engine rebuilds
+    private var bassGain = 0f; private var xLow = 20f; private var xHigh = 200f
+    private var yLow = 20f; private var yHigh = 200f; private var gx = 0f; private var gy = 0f
 
-    fun setEnabled(enabled: Boolean) { isEnabled = enabled }
-    fun setBassGain(gain: Float) = engine.setBassGain(gain)
-    fun setFilterX(low: Float, high: Float) = engine.setFilterXPassFrequency(low, high)
-    fun setFilterY(low: Float, high: Float) = engine.setFilterYPassFrequency(low, high)
-    fun setSideGain(gx: Float, gy: Float) = engine.setSideGain(gx, gy)
+    fun setEnabled(e: Boolean) { isEnabled = e }
+    fun setBassGain(g: Float) { bassGain = g; engine.setBassGain(g) }
+    fun setFilterX(l: Float, h: Float) { xLow = l; xHigh = h; engine.setFilterXPassFrequency(l, h) }
+    fun setFilterY(l: Float, h: Float) { yLow = l; yHigh = h; engine.setFilterYPassFrequency(l, h) }
+    fun setSideGain(x: Float, y: Float) { gx = x; gy = y; engine.setSideGain(x, y) }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
-        return AudioProcessor.AudioFormat(
-            inputAudioFormat.sampleRate,
-            inputAudioFormat.channelCount,
-            C.ENCODING_PCM_16BIT
-        )
+        engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
+            setBassGain(bassGain); setFilterXPassFrequency(xLow, xHigh)
+            setFilterYPassFrequency(yLow, yHigh); setSideGain(gx, gy)
+        }
+        return inputAudioFormat
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {

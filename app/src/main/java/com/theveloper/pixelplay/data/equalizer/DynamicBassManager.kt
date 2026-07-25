@@ -18,7 +18,7 @@ class DynamicBassManager @Inject constructor() {
         private const val TAG = "DynamicBassManager"
     }
     
-    private var dynamicBassProcessor: DynamicBassProcessor? = null
+    private var dynamicBassProcessor: DynamicBassProcessor? = DynamicBassProcessor()
     private var currentSampleRate: Int = 44100
     
     // State flows for UI binding
@@ -85,7 +85,7 @@ class DynamicBassManager @Inject constructor() {
     fun setBassGain(gain: Float) {
         val clamped = gain.coerceIn(0f, 1f)
         _bassGain.value = clamped
-        dynamicBassProcessor?.setBassGain(clamped)
+        dynamicBassProcessor?.setBassGain(clamped * 100f)
         Timber.tag(TAG).d("DynamicBass gain set to: $clamped")
     }
     
