@@ -1,6 +1,10 @@
 package com.theveloper.pixelplay.presentation.screens
 
-import com.theveloper.pixelplay.presentation.components.*
+import com.theveloper.pixelplay.presentation.components.PresetTabsRow
+import com.theveloper.pixelplay.presentation.components.BandSlidersSection
+import com.theveloper.pixelplay.presentation.components.EffectControlsSection
+import com.theveloper.pixelplay.presentation.components.VolumeControlCard
+// Also any other missing ones like DynamicBassControlsSection (it’s already defined in the file)
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.Animatable
