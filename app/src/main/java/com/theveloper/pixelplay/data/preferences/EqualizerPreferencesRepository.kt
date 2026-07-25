@@ -273,20 +273,20 @@ class EqualizerPreferencesRepository @Inject constructor(
 
     suspend fun setDynamicBassFilterX(low: Float, high: Float) =
         dataStore.edit { preferences ->
-            preferences[Keys.DYNAMIC_BASS_FILTER_X_LOW] = low.coerceIn(20f, 500f)
-            preferences[Keys.DYNAMIC_BASS_FILTER_X_HIGH] = high.coerceIn(20f, 500f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_X_LOW] = low.coerceIn(200f, 1500f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_X_HIGH] = high.coerceIn(2000f, 8000f)
         }
 
     suspend fun setDynamicBassFilterY(low: Float, high: Float) =
         dataStore.edit { preferences ->
-            preferences[Keys.DYNAMIC_BASS_FILTER_Y_LOW] = low.coerceIn(20f, 500f)
-            preferences[Keys.DYNAMIC_BASS_FILTER_Y_HIGH] = high.coerceIn(20f, 500f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_Y_LOW] = low.coerceIn(40f, 400f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_Y_HIGH] = high.coerceIn(10f, 200f)
         }
 
     suspend fun setDynamicBassSideGain(gx: Float, gy: Float) =
         dataStore.edit { preferences ->
-            preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_X] = gx.coerceIn(-1f, 1f)
-            preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_Y] = gy.coerceIn(-1f, 1f)
+            preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_X] = gx.coerceIn(0f, 100f)
+            preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_Y] = gy.coerceIn(0f, 100f)
         }
 
     suspend fun saveCustomPreset(preset: EqualizerPreset) {
