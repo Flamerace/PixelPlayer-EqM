@@ -1061,15 +1061,25 @@ class DualPlayerEngine @Inject constructor(
                 enableFloatOutput: Boolean,
                 enableAudioOutputPlaybackParams: Boolean
             ): AudioSink {
+                val processors = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+
+                // 1. Preserve the existing custom processors
+                processors.add(HiResSampleRateCapAudioProcessor())
+                processors.add(SurroundDownmixProcessor())
+
+                // 2. Add the dynamic bass processor (if present)
+                dynamicBassManager.getProcessor()?.let { processors.add(it) }
+                
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(hiFiModeEnabled)
                     .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-                    .setAudioProcessorChain(
+                    /*.setAudioProcessorChain(
                         DefaultAudioSink.DefaultAudioProcessorChain(
                             HiResSampleRateCapAudioProcessor(),
                             SurroundDownmixProcessor()
                         )
-                    )
+                    )*/
+                    .setAudioProcessors(processors)
                     .build()
             }
 
