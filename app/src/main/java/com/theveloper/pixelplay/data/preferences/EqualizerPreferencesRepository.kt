@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.theveloper.pixelplay.data.equalizer.EqualizerPreset
@@ -37,6 +38,16 @@ class EqualizerPreferencesRepository @Inject constructor(
         val VIEW_MODE = stringPreferencesKey("equalizer_view_mode")
         val CUSTOM_PRESETS = stringPreferencesKey("custom_presets_json")
         val PINNED_PRESETS = stringPreferencesKey("pinned_presets_json")
+        
+        // DynamicBass keys
+        val DYNAMIC_BASS_ENABLED = booleanPreferencesKey("dynamic_bass_enabled")
+        val DYNAMIC_BASS_GAIN = floatPreferencesKey("dynamic_bass_gain")
+        val DYNAMIC_BASS_FILTER_X_LOW = floatPreferencesKey("dynamic_bass_filter_x_low")
+        val DYNAMIC_BASS_FILTER_X_HIGH = floatPreferencesKey("dynamic_bass_filter_x_high")
+        val DYNAMIC_BASS_FILTER_Y_LOW = floatPreferencesKey("dynamic_bass_filter_y_low")
+        val DYNAMIC_BASS_FILTER_Y_HIGH = floatPreferencesKey("dynamic_bass_filter_y_high")
+        val DYNAMIC_BASS_SIDE_GAIN_X = floatPreferencesKey("dynamic_bass_side_gain_x")
+        val DYNAMIC_BASS_SIDE_GAIN_Y = floatPreferencesKey("dynamic_bass_side_gain_y")
     }
 
     val equalizerViewModeFlow: Flow<EqualizerViewMode> = dataStore.data.map { preferences ->
@@ -141,6 +152,39 @@ class EqualizerPreferencesRepository @Inject constructor(
         }
     }
 
+    // DynamicBass flows
+    val dynamicBassEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_ENABLED] ?: false
+    }
+
+    val dynamicBassBassGainFlow: Flow<Float> = dataStore.data.map { preferences ->
+        (preferences[Keys.DYNAMIC_BASS_GAIN] ?: 0.5f).coerceIn(0f, 1f)
+    }
+
+    val dynamicBassFilterXLowFlow: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_FILTER_X_LOW] ?: 50f
+    }
+
+    val dynamicBassFilterXHighFlow: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_FILTER_X_HIGH] ?: 250f
+    }
+
+    val dynamicBassFilterYLowFlow: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_FILTER_Y_LOW] ?: 20f
+    }
+
+    val dynamicBassFilterYHighFlow: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_FILTER_Y_HIGH] ?: 200f
+    }
+
+    val dynamicBassSideGainXFlow: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_X] ?: 0f
+    }
+
+    val dynamicBassSideGainYFlow: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_Y] ?: 0f
+    }
+
     suspend fun setEqualizerViewMode(mode: EqualizerViewMode) =
         dataStore.edit { preferences ->
             preferences[Keys.VIEW_MODE] = mode.name
@@ -214,6 +258,35 @@ class EqualizerPreferencesRepository @Inject constructor(
     suspend fun setPinnedPresets(presetNames: List<String>) =
         dataStore.edit { preferences ->
             preferences[Keys.PINNED_PRESETS] = json.encodeToString(presetNames)
+        }
+
+    // DynamicBass setters
+    suspend fun setDynamicBassEnabled(enabled: Boolean) =
+        dataStore.edit { preferences ->
+            preferences[Keys.DYNAMIC_BASS_ENABLED] = enabled
+        }
+
+    suspend fun setDynamicBassBassGain(gain: Float) =
+        dataStore.edit { preferences ->
+            preferences[Keys.DYNAMIC_BASS_GAIN] = gain.coerceIn(0f, 1f)
+        }
+
+    suspend fun setDynamicBassFilterX(low: Float, high: Float) =
+        dataStore.edit { preferences ->
+            preferences[Keys.DYNAMIC_BASS_FILTER_X_LOW] = low.coerceIn(20f, 500f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_X_HIGH] = high.coerceIn(20f, 500f)
+        }
+
+    suspend fun setDynamicBassFilterY(low: Float, high: Float) =
+        dataStore.edit { preferences ->
+            preferences[Keys.DYNAMIC_BASS_FILTER_Y_LOW] = low.coerceIn(20f, 500f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_Y_HIGH] = high.coerceIn(20f, 500f)
+        }
+
+    suspend fun setDynamicBassSideGain(gx: Float, gy: Float) =
+        dataStore.edit { preferences ->
+            preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_X] = gx.coerceIn(-1f, 1f)
+            preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_Y] = gy.coerceIn(-1f, 1f)
         }
 
     suspend fun saveCustomPreset(preset: EqualizerPreset) {
