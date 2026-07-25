@@ -1931,7 +1931,7 @@ private fun DynamicBassControlsSection(
                                     onFilterXChange(newLow, dynamicBassFilterXHigh)
                                 }
                             },
-                            valueRange = 20f..500f,
+                            valueRange = 200f..1500f,
                             modifier = Modifier.weight(1f)
                         )
                         Slider(
@@ -1941,7 +1941,7 @@ private fun DynamicBassControlsSection(
                                     onFilterXChange(dynamicBassFilterXLow, newHigh)
                                 }
                             },
-                            valueRange = 20f..500f,
+                            valueRange = 2000f..8000f,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -1975,7 +1975,7 @@ private fun DynamicBassControlsSection(
                                     onFilterYChange(newLow, dynamicBassFilterYHigh)
                                 }
                             },
-                            valueRange = 20f..500f,
+                            valueRange = 10f..200f,
                             modifier = Modifier.weight(1f)
                         )
                         Slider(
@@ -1985,7 +1985,7 @@ private fun DynamicBassControlsSection(
                                     onFilterYChange(dynamicBassFilterYLow, newHigh)
                                 }
                             },
-                            valueRange = 20f..500f,
+                            valueRange = 40f..400f,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -2003,7 +2003,7 @@ private fun DynamicBassControlsSection(
                                 style = MaterialTheme.typography.labelMedium
                             )
                             Text(
-                                text = "${(dynamicBassSideGainX * 100).toInt()}%",
+                                text = "${(dynamicBassSideGainX).toInt()}%",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -2013,7 +2013,7 @@ private fun DynamicBassControlsSection(
                             onValueChange = { newGx ->
                                 onSideGainChange(newGx, dynamicBassSideGainY)
                             },
-                            valueRange = -1f..1f,
+                            valueRange = 0f..100f,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -2029,7 +2029,7 @@ private fun DynamicBassControlsSection(
                                 style = MaterialTheme.typography.labelMedium
                             )
                             Text(
-                                text = "${(dynamicBassSideGainY * 100).toInt()}%",
+                                text = "${(dynamicBassSideGainY).toInt()}%",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -2039,7 +2039,7 @@ private fun DynamicBassControlsSection(
                             onValueChange = { newGy ->
                                 onSideGainChange(dynamicBassSideGainX, newGy)
                             },
-                            valueRange = -1f..1f,
+                            valueRange = 0f..100f,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
