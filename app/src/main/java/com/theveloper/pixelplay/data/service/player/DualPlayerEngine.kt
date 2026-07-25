@@ -1,5 +1,7 @@
 package com.theveloper.pixelplay.data.service.player
 
+import com.theveloper.pixelplay.data.equalizer.DynamicBassManager
+
 import android.app.ActivityManager
 import android.content.Context
 import android.media.AudioAttributes
