@@ -488,6 +488,11 @@ class DualPlayerEngine @Inject constructor(
             format: Format,
             decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?
         ) {
+            // ADDED: Initialize DynamicBassProcessor with the audio format
+            if (format.sampleRate != Format.NO_VALUE) {
+                dynamicBassManager.initializeProcessor(format.sampleRate)
+            }
+            
             // Record the live format (channels, sample rate, bit depth) as the report's
             // source of multichannel / bit-depth data — these aren't stored in the library DB.
             PerformanceMetrics.recordPlaybackFormat(
@@ -1043,6 +1048,14 @@ class DualPlayerEngine @Inject constructor(
     }
 
     private fun buildPlayer(): ExoPlayer {
+        // Create custom audio sink with processors
+        val audioProcessors = buildAudioProcessorChain()
+        
+        val audioSink = DefaultAudioSink(
+            audioCapabilities = /* existing */,
+            audioProcessors = audioProcessors // ADDED
+        )
+        
         val mediaCodecSelector = MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
             val decoderInfos = MediaCodecSelector.DEFAULT.getDecoderInfos(
                 mimeType,
