@@ -58,7 +58,7 @@ class DynamicBassManager @Inject constructor() {
         }
         
         try {
-            dynamicBassProcessor = DynamicBassProcessor(sampleRate).apply {
+            dynamicBassProcessor = DynamicBassProcessor().apply {
                 setEnabled(_isEnabled.value)
                 setBassGain(_bassGain.value)
                 setFilterX(_filterXLow.value, _filterXHigh.value)
