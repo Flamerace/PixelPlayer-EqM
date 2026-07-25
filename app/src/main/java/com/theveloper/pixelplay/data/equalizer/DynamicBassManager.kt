@@ -49,6 +49,10 @@ class DynamicBassManager @Inject constructor() {
     private val _sideGainY = MutableStateFlow(0f)
     val sideGainY: StateFlow<Float> = _sideGainY.asStateFlow()
 
+    fun initializeProcessor(sampleRate: Int) {
+        Timber.tag(TAG).d("initializeProcessor($sampleRate Hz) called - no-op, handled via onConfigure()")
+    }
+
     /**
      * Get the processor instance to add to ExoPlayer's audio sink.
      * Always non-null once this manager is constructed.
