@@ -1,6 +1,7 @@
 package com.theveloper.pixelplay.data.equalizer
 
-import androidx.media3.common.AudioFormat
+import androidx.media3.common.C
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 
@@ -17,47 +18,49 @@ class DynamicBassProcessor(
     fun setFilterY(low: Float, high: Float) = engine.setFilterYPassFrequency(low, high)
     fun setSideGain(gx: Float, gy: Float) = engine.setSideGain(gx, gy)
 
-    override fun configure(inputFormat: AudioFormat, outputFormat: AudioFormat): AudioFormat? {
-        if (inputFormat.pcmEncoding != AudioFormat.ENCODING_PCM_16BIT || inputFormat.channelCount != 2) {
-            return null
+    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
+            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
-        return AudioFormat.Builder()
-            .setSampleRate(inputFormat.sampleRate)
-            .setChannelCount(inputFormat.channelCount)
-            .setPcmEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .build()
+        return AudioProcessor.AudioFormat(
+            inputAudioFormat.sampleRate,
+            inputAudioFormat.channelCount,
+            C.ENCODING_PCM_16BIT
+        )
     }
 
-    override fun process(inputBuffer: ByteBuffer, outputBuffer: ByteBuffer): Boolean {
-        if (!isEnabled) {
-            outputBuffer.put(inputBuffer)
-            return true
-        }
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        val totalSamples = inputBuffer.remaining() / 2 // 2 bytes per 16-bit sample
+        if (totalSamples == 0) return
 
+        val frames = totalSamples / 2 // stereo: 2 samples per frame
         val inputSamples = inputBuffer.asShortBuffer()
-        val totalSamples = inputSamples.remaining()
-        if (totalSamples == 0) return false
 
-        val frames = totalSamples / 2
+        val outputBuffer = replaceOutputBuffer(frames * 2 * 2) // frames * channels * bytesPerSample
         val outputSamples = outputBuffer.asShortBuffer()
 
-        for (i in 0 until frames) {
-            val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
-            val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
+        if (!isEnabled) {
+            for (i in 0 until frames * 2) {
+                outputSamples.put(i, inputSamples.get(i))
+            }
+        } else {
+            for (i in 0 until frames) {
+                val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
+                val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
 
-            engine.processSamples(left, right)
+                engine.processSamples(left, right)
 
-            val outL = (engine.getLeft() * Short.MAX_VALUE).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            val outR = (engine.getRight() * Short.MAX_VALUE).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                val outL = (engine.getLeft() * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                val outR = (engine.getRight() * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
 
-            outputSamples.put(i * 2, outL.toShort())
-            outputSamples.put(i * 2 + 1, outR.toShort())
+                outputSamples.put(i * 2, outL.toShort())
+                outputSamples.put(i * 2 + 1, outR.toShort())
+            }
         }
 
         inputBuffer.position(inputBuffer.limit())
-        outputBuffer.position(outputBuffer.position() + totalSamples * 2)
-        return true
+        outputBuffer.position(frames * 2 * 2)
     }
 }
