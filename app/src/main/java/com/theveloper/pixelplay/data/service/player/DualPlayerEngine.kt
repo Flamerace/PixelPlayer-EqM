@@ -272,6 +272,17 @@ class DualPlayerEngine @Inject constructor(
 
     private var onPlayerAboutToBeReleasedListener: ((Player) -> Unit)? = null
 
+    private fun buildAudioProcessorChain(): Array<com.google.android.exoplayer2.audio.AudioProcessor> {
+        val processors = mutableListOf<com.google.android.exoplayer2.audio.AudioProcessor>()
+        
+        // Add DynamicBassProcessor if available
+        dynamicBassManager.getProcessor()?.let {
+            processors.add(it)
+        }
+        
+        return processors.toTypedArray()
+    }
+
     fun setOnPlayerAboutToBeReleasedListener(listener: (Player) -> Unit) {
         onPlayerAboutToBeReleasedListener = listener
     }
