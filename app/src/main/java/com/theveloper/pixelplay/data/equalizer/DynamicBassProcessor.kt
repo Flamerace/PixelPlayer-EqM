@@ -1,5 +1,5 @@
 // DynamicBassProcessor.kt
-package com.theveloper.pixelplay.data.equalizer
+/*package com.theveloper.pixelplay.data.equalizer
 
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
@@ -76,4 +76,82 @@ class DynamicBassProcessor(
         // If needed, re‑init the engine (but preserve parameters).
         // We rely on the engine’s state; no special reset needed.
     }
+}*/
+
+package com.theveloper.pixelplay.data.equalizer
+
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.BaseAudioProcessor
+import androidx.media3.common.AudioFormat
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
+class DynamicBassProcessor(
+    private val sampleRate: Int
+) : BaseAudioProcessor() {
+
+    private val engine = DynamicBassEngine(sampleRate.toFloat())
+    private var isEnabled = true
+
+    fun setEnabled(enabled: Boolean) { isEnabled = enabled }
+    fun setBassGain(gain: Float) = engine.setBassGain(gain)
+    fun setFilterX(low: Float, high: Float) = engine.setFilterXPassFrequency(low, high)
+    fun setFilterY(low: Float, high: Float) = engine.setFilterYPassFrequency(low, high)
+    fun setSideGain(gx: Float, gy: Float) = engine.setSideGain(gx, gy)
+
+    // Media3: configure takes input and output formats, returns the output format (or null to reject)
+    override fun configure(inputFormat: AudioFormat, outputFormat: AudioFormat): AudioFormat? {
+        // We only support 16-bit PCM stereo
+        if (inputFormat.pcmEncoding != AudioFormat.ENCODING_PCM_16BIT || inputFormat.channelCount != 2) {
+            return null
+        }
+        // We can pass through the same format (or you can return a new one if you change sample rate)
+        return AudioFormat.Builder()
+            .setSampleRate(inputFormat.sampleRate)
+            .setChannelCount(inputFormat.channelCount)
+            .setPcmEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .build()
+    }
+
+    // Media3: process reads from inputBuffer and writes to outputBuffer
+    override fun process(inputBuffer: ByteBuffer, outputBuffer: ByteBuffer): Boolean {
+        if (!isEnabled) {
+            // Bypass: copy input to output unchanged
+            outputBuffer.put(inputBuffer)
+            return true
+        }
+
+        val inputSamples = inputBuffer.asShortBuffer()
+        val totalSamples = inputSamples.remaining()
+        if (totalSamples == 0) return false
+
+        val frames = totalSamples / 2
+        val outputSamples = outputBuffer.asShortBuffer()
+
+        for (i in 0 until frames) {
+            val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
+            val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
+
+            engine.processSamples(left, right)
+
+            val outL = (engine.getLeft() * Short.MAX_VALUE).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            val outR = (engine.getRight() * Short.MAX_VALUE).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+
+            outputSamples.put(i * 2, outL.toShort())
+            outputSamples.put(i * 2 + 1, outR.toShort())
+        }
+
+        // Mark input as fully consumed
+        inputBuffer.position(inputBuffer.limit())
+        outputBuffer.position(outputBuffer.position() + totalSamples * 2) // bytes
+        return true
+    }
+
+    // queueInput is already implemented in BaseAudioProcessor – no need to override,
+    // but if your version requires it, you can add:
+    // override fun queueInput(inputBuffer: ByteBuffer) = super.queueInput(inputBuffer)
+
+    // reset is final – remove the override.
 }
