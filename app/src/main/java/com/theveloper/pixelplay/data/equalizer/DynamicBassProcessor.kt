@@ -11,7 +11,7 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     private var engine = DynamicBassEngine(44100f) // placeholder until real format arrives
     private var isEnabled = true
 
-    // cached values so they survive engine rebuilds in onConfigure()
+    // Cached values so they survive engine rebuilds in onConfigure()
     private var bassGain = 0f
     private var xLow = 20f; private var xHigh = 200f
     private var yLow = 20f; private var yHigh = 200f
@@ -40,56 +40,59 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-    if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
-        // Unsupported format for this effect — become inactive instead of failing playback
-        return AudioProcessor.AudioFormat.NOT_SET
-    }
-    engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
-        setBassGain(bassGain)
-        setFilterXPassFrequency(xLow, xHigh)
-        setFilterYPassFrequency(yLow, yHigh)
-        setSideGain(gx, gy)
-    }
-    return AudioProcessor.AudioFormat(
-        inputAudioFormat.sampleRate,
-        inputAudioFormat.channelCount,
-        C.ENCODING_PCM_16BIT
-    )
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
+            // Unsupported format for this effect (e.g. mono, float/Hi-Fi output) —
+            // become inactive instead of throwing and killing playback.
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
+        engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
+            setBassGain(bassGain)
+            setFilterXPassFrequency(xLow, xHigh)
+            setFilterYPassFrequency(yLow, yHigh)
+            setSideGain(gx, gy)
+        }
+        return AudioProcessor.AudioFormat(
+            inputAudioFormat.sampleRate,
+            inputAudioFormat.channelCount,
+            C.ENCODING_PCM_16BIT
+        )
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-    val totalSamples = inputBuffer.remaining() / 2
-    if (totalSamples == 0) return
+        val totalSamples = inputBuffer.remaining() / 2 // 2 bytes per 16-bit sample
+        if (totalSamples == 0) return
 
-    val frames = totalSamples / 2
-    val inputSamples = inputBuffer.asShortBuffer()
+        val frames = totalSamples / 2 // stereo: 2 samples per frame
+        val inputSamples = inputBuffer.asShortBuffer()
 
-    val outputBuffer = replaceOutputBuffer(frames * 2 * 2)
-    val outputSamples = outputBuffer.asShortBuffer()
+        val outputBuffer = replaceOutputBuffer(frames * 2 * 2) // frames * channels * bytesPerSample
+        val outputSamples = outputBuffer.asShortBuffer()
 
-    if (!isEnabled) {
-        for (i in 0 until frames * 2) {
-            outputSamples.put(i, inputSamples.get(i))
+        if (!isEnabled) {
+            for (i in 0 until frames * 2) {
+                outputSamples.put(i, inputSamples.get(i))
+            }
+        } else {
+            for (i in 0 until frames) {
+                val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
+                val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
+
+                engine.processSamples(left, right)
+
+                // Soft-clip (tanh) instead of hard-clamp to avoid harsh digital clipping
+                // artifacts on peaks pushed above full scale by the bass boost.
+                val outL = (tanh(engine.getLeft()) * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                val outR = (tanh(engine.getRight()) * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+
+                outputSamples.put(i * 2, outL.toShort())
+                outputSamples.put(i * 2 + 1, outR.toShort())
+            }
         }
-    } else {
-        for (i in 0 until frames) {
-            val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
-            val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
 
-            engine.processSamples(left, right)
-
-            // soft-clip instead of hard-clamp to avoid digital clipping artifacts
-            val outL = (tanh(engine.getLeft()) * Short.MAX_VALUE).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            val outR = (tanh(engine.getRight()) * Short.MAX_VALUE).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-
-            outputSamples.put(i * 2, outL.toShort())
-            outputSamples.put(i * 2 + 1, outR.toShort())
-        }
-    }
-
-    inputBuffer.position(inputBuffer.limit())
-    outputBuffer.position(frames * 2 * 2)
+        inputBuffer.position(inputBuffer.limit())
+        outputBuffer.position(frames * 2 * 2)
+        outputBuffer.flip() // CRITICAL: mark exactly the bytes written as valid/readable output
     }
 }
