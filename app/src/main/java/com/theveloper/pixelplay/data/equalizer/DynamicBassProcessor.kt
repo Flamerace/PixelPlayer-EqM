@@ -39,20 +39,21 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-        }
-        engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
-            setBassGain(bassGain)
-            setFilterXPassFrequency(xLow, xHigh)
-            setFilterYPassFrequency(yLow, yHigh)
-            setSideGain(gx, gy)
-        }
-        return AudioProcessor.AudioFormat(
-            inputAudioFormat.sampleRate,
-            inputAudioFormat.channelCount,
-            C.ENCODING_PCM_16BIT
-        )
+    if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
+        // Unsupported format for this effect — become inactive instead of failing playback
+        return AudioProcessor.AudioFormat.NOT_SET
+    }
+    engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
+        setBassGain(bassGain)
+        setFilterXPassFrequency(xLow, xHigh)
+        setFilterYPassFrequency(yLow, yHigh)
+        setSideGain(gx, gy)
+    }
+    return AudioProcessor.AudioFormat(
+        inputAudioFormat.sampleRate,
+        inputAudioFormat.channelCount,
+        C.ENCODING_PCM_16BIT
+    )
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
