@@ -57,37 +57,38 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val totalSamples = inputBuffer.remaining() / 2
-        if (totalSamples == 0) return
+    val totalSamples = inputBuffer.remaining() / 2
+    if (totalSamples == 0) return
 
-        val frames = totalSamples / 2
-        val inputSamples = inputBuffer.asShortBuffer()
+    val frames = totalSamples / 2
+    val inputSamples = inputBuffer.asShortBuffer()
 
-        val outputBuffer = replaceOutputBuffer(frames * 2 * 2)
-        val outputSamples = outputBuffer.asShortBuffer()
+    val outputBuffer = replaceOutputBuffer(frames * 2 * 2)
+    val outputSamples = outputBuffer.asShortBuffer()
 
-        if (!isEnabled) {
-            for (i in 0 until frames * 2) {
-                outputSamples.put(i, inputSamples.get(i))
-            }
-        } else {
-            for (i in 0 until frames) {
-                val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
-                val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
-
-                engine.processSamples(left, right)
-
-                val outL = (engine.getLeft() * Short.MAX_VALUE).toInt()
-                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                val outR = (engine.getRight() * Short.MAX_VALUE).toInt()
-                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-
-                outputSamples.put(i * 2, outL.toShort())
-                outputSamples.put(i * 2 + 1, outR.toShort())
-            }
+    if (!isEnabled) {
+        for (i in 0 until frames * 2) {
+            outputSamples.put(i, inputSamples.get(i))
         }
+    } else {
+        for (i in 0 until frames) {
+            val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
+            val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
 
-        inputBuffer.position(inputBuffer.limit())
-        outputBuffer.position(frames * 2 * 2)
+            engine.processSamples(left, right)
+
+            // soft-clip instead of hard-clamp to avoid digital clipping artifacts
+            val outL = (tanh(engine.getLeft()) * Short.MAX_VALUE).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            val outR = (tanh(engine.getRight()) * Short.MAX_VALUE).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+
+            outputSamples.put(i * 2, outL.toShort())
+            outputSamples.put(i * 2 + 1, outR.toShort())
+        }
+    }
+
+    inputBuffer.position(inputBuffer.limit())
+    outputBuffer.position(frames * 2 * 2)
     }
 }
