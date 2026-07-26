@@ -1,4 +1,4 @@
-package com.theveloper.pixelplay.data.equalizer
+/*package com.theveloper.pixelplay.data.equalizer
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
@@ -95,4 +95,104 @@ class DynamicBassProcessor : BaseAudioProcessor() {
         outputBuffer.position(frames * 2 * 2)
         outputBuffer.flip() // CRITICAL: mark exactly the bytes written as valid/readable output
     }
+}*/
+
+
+package com.theveloper.pixelplay.data.equalizer
+
+import androidx.media3.common.C
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.BaseAudioProcessor
+import java.nio.ByteBuffer
+
+class DynamicBassProcessor : BaseAudioProcessor() {
+
+    private var engine = DynamicBassEngine(44100f) // placeholder until real format arrives
+    private var isEnabled = true
+
+    // Cached values so they survive engine rebuilds in onConfigure()
+    private var bassGain = 0f
+    private var xLow = 20f; private var xHigh = 200f
+    private var yLow = 20f; private var yHigh = 200f
+    private var gx = 0f; private var gy = 0f
+
+    fun setEnabled(enabled: Boolean) { isEnabled = enabled }
+
+    fun setBassGain(gain: Float) {
+        bassGain = gain
+        engine.setBassGain(gain)
+    }
+
+    fun setFilterX(low: Float, high: Float) {
+        xLow = low; xHigh = high
+        engine.setFilterXPassFrequency(low, high)
+    }
+
+    fun setFilterY(low: Float, high: Float) {
+        yLow = low; yHigh = high
+        engine.setFilterYPassFrequency(low, high)
+    }
+
+    fun setSideGain(gainX: Float, gainY: Float) {
+        gx = gainX; gy = gainY
+        engine.setSideGain(gainX, gainY)
+    }
+
+    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
+            // Unsupported format for this effect (e.g. mono, float/Hi-Fi output) —
+            // become inactive instead of throwing and killing playback.
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
+        engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
+            setBassGain(bassGain)
+            setFilterXPassFrequency(xLow, xHigh)
+            setFilterYPassFrequency(yLow, yHigh)
+            setSideGain(gx, gy)
+        }
+        return AudioProcessor.AudioFormat(
+            inputAudioFormat.sampleRate,
+            inputAudioFormat.channelCount,
+            C.ENCODING_PCM_16BIT
+        )
+    }
+
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        val totalSamples = inputBuffer.remaining() / 2 // 2 bytes per 16-bit sample
+        if (totalSamples == 0) return
+
+        val frames = totalSamples / 2 // stereo: 2 samples per frame
+        val inputSamples = inputBuffer.asShortBuffer()
+
+        val outputBuffer = replaceOutputBuffer(frames * 2 * 2) // frames * channels * bytesPerSample
+        val outputSamples = outputBuffer.asShortBuffer()
+
+        if (!isEnabled) {
+            for (i in 0 until frames * 2) {
+                outputSamples.put(i, inputSamples.get(i))
+            }
+        } else {
+            for (i in 0 until frames) {
+                val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
+                val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
+
+                engine.processSamples(left, right)
+
+                // DynamicBassEngine now applies its own scoped gain-reduction limiter
+                // internally, so this is just a safety clamp for int16 conversion.
+                val outL = (engine.getLeft() * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                val outR = (engine.getRight() * Short.MAX_VALUE).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+
+                outputSamples.put(i * 2, outL.toShort())
+                outputSamples.put(i * 2 + 1, outR.toShort())
+            }
+        }
+
+        inputBuffer.position(inputBuffer.limit())
+        outputBuffer.position(frames * 2 * 2)
+        outputBuffer.flip() // CRITICAL: mark exactly the bytes written as valid/readable output
+    }
 }
+
