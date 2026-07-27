@@ -1,12 +1,17 @@
 // DynamicBassEngine.kt
-/*package com.theveloper.pixelplay.data.equalizer
+package com.theveloper.pixelplay.data.equalizer
 
 import kotlin.math.PI
-import kotlin.math.sin
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.sin
 
 /**
- * Low-pass 2‑pole IIR filter.
+ * Low-pass 2-pole IIR filter. Used only for the "simple mode" fallback
+ * (see [DynamicBassEngine.processSamples]) — a direct port of the eel
+ * LowPassFilter_Set / LowPassFilter_ProcessSample functions.
  */
 internal class LowPassFilter(private val sampleRate: Float) {
     private var b0 = 0f; private var b1 = 0f; private var b2 = 0f
@@ -45,7 +50,10 @@ internal class LowPassFilter(private val sampleRate: Float) {
 }
 
 /**
- * 4‑pole filter (two cascaded biquads) producing three outputs.
+ * 4-pole cascaded one-pole filter producing three simultaneous outputs
+ * (low band, high band via delay-compensated subtraction, and the band
+ * between them). Direct port of the eel PolesFilter_Set / ProcessSample
+ * functions.
  */
 internal class PolesFilter(private val sampleRate: Float) {
     private var input0 = 0f; private var input1 = 0f; private var input2 = 0f
@@ -87,7 +95,7 @@ internal class PolesFilter(private val sampleRate: Float) {
 }
 
 /**
- * Main Dynamic Bass engine.
+ * Main Dynamic Bass engine — a port of ViperFX's "Dynamic Bass" eel effect.
  */
 class DynamicBassEngine(private val sampleRate: Float) {
     private val lowPass = LowPassFilter(sampleRate)
@@ -106,6 +114,36 @@ class DynamicBassEngine(private val sampleRate: Float) {
     private var qPeak = 0f
     private var outSampleL = 0f
     private var outSampleR = 0f
+
+    // --- Peak limiter state ---
+    // Two independent, priority-ordered ducking stages:
+    //   primary   = mids (X1-X2) + kicks/bassy-drums (Y2-X1) — ducked first, and fully as needed
+    //   secondary = highs (X2 and above) — left alone unless primary ducking alone isn't enough,
+    //               and even then only partially ducked (gentle, not a hard limit)
+    // The bass core (Y1-Y2) and sub-bass (below Y1) are never part of either stage.
+    // Note: the original eel effect has no limiter at all (spl0/spl1 are handed straight
+    // back to the host). This is an addition to keep 16-bit PCM output from hard-clipping,
+    // since the bass boost (dBassGain maps to up to ~21x internal gain) can easily push
+    // samples past full scale.
+    private val limiterCeiling = 0.98f
+    private val attackCoeff = exp(-1f / (sampleRate * 0.005f))    // ~5ms — catch hits fast
+    private val releaseCoeff = exp(-1f / (sampleRate * 0.100f))  // ~100ms — recover smoothly
+    // Secondary (highs) reacts a little slower and only ever applies half the needed reduction,
+    // so it reads as a light touch rather than an audible duck.
+    private val secondaryAttackCoeff = exp(-1f / (sampleRate * 0.015f))  // ~15ms
+    private val secondaryReleaseCoeff = exp(-1f / (sampleRate * 0.150f)) // ~150ms
+    private val secondaryDuckBlend = 0.5f
+    private var primaryGainReduction = 1f
+    private var secondaryGainReduction = 1f
+
+    // Absolute last resort: guarantees no output sample can ever exceed true full scale,
+    // even in the pathological edge case where the preserved bass core alone (which the
+    // two stages above never touch) is hot enough to overflow on its own. In normal use
+    // this should essentially never engage — stages 1 and 2 handle everything else.
+    private var safetyGainReduction = 1f
+    private val safetyAttackCoeff = exp(-1f / (sampleRate * 0.001f))  // ~1ms — near-instant
+    private val safetyReleaseCoeff = exp(-1f / (sampleRate * 0.100f)) // ~100ms
+    private val hardCeiling = 0.999f
 
     init {
         initFilters()
@@ -149,32 +187,92 @@ class DynamicBassEngine(private val sampleRate: Float) {
 
     fun processSamples(left: Float, right: Float) {
         if (lowFreqX <= 120f) {
+            // Simple mode: a single resonant boosted band added on top of the original signal.
+            // Duck only the added boost, never the original pass-through content.
             val avg = lowPass.process(left + right)
-            outSampleL = left + avg
-            outSampleR = right + avg
+
+            val peak = max(abs(left + avg), abs(right + avg))
+            primaryGainReduction = updateGain(primaryGainReduction, peak, attackCoeff, releaseCoeff)
+
+            outSampleL = left + avg * primaryGainReduction
+            outSampleR = right + avg * primaryGainReduction
         } else {
             filterXL.process(left)
             filterXR.process(right)
             val xL0 = filterXL.getOut0(); val xR0 = filterXR.getOut0()
-            val xL1 = filterXL.getOut1(); val xR1 = filterXR.getOut1()
-            val xL2 = filterXL.getOut2(); val xR2 = filterXR.getOut2()
+            val xL1 = filterXL.getOut1(); val xR1 = filterXR.getOut1() // highs (X2+) — secondary, mostly untouched
+            val xL2 = filterXL.getOut2(); val xR2 = filterXR.getOut2() // mids (X1-X2) — primary duck target
 
             filterYL.process(bassGain * xL0)
             filterYR.process(bassGain * xR0)
-            val yL0 = filterYL.getOut0(); val yR0 = filterYR.getOut0()
-            val yL1 = filterYL.getOut1(); val yR1 = filterYR.getOut1()
-            val yL2 = filterYL.getOut2(); val yR2 = filterYR.getOut2()
+            val yL0 = filterYL.getOut0(); val yR0 = filterYR.getOut0() // sub-bass (below Y1) — preserved
+            val yL1 = filterYL.getOut1(); val yR1 = filterYR.getOut1() // kicks/bassy drums (Y2-X1) — primary duck target
+            val yL2 = filterYL.getOut2(); val yR2 = filterYR.getOut2() // bass core (Y1-Y2) — preserved
 
-            outSampleL = xL1 + yL2 + sideGainX * yL1 + sideGainY * yL0 + xL2
-            outSampleR = xR1 + yR2 + sideGainX * yR1 + sideGainY * yR0 + xR2
+            // Preserved: never ducked, this is the whole point of the effect.
+            val preservedL = yL2 + sideGainY * yL0
+            val preservedR = yR2 + sideGainY * yR0
+
+            // Primary duck target: mids + kick/drum band. Ducked first and fully as needed.
+            val primaryL = xL2 + sideGainX * yL1
+            val primaryR = xR2 + sideGainX * yR1
+
+            // Secondary: highs above X2. Left alone unless primary ducking alone isn't enough.
+            val secondaryL = xL1
+            val secondaryR = xR1
+
+            // Stage 1: duck the primary band to keep preserved+primary under the ceiling.
+            val lowMidPeak = max(abs(preservedL + primaryL), abs(preservedR + primaryR))
+            val targetPrimaryGain = if (lowMidPeak > limiterCeiling) {
+                val preservedPeak = max(abs(preservedL), abs(preservedR))
+                val primaryPeak = max(abs(primaryL), abs(primaryR))
+                if (primaryPeak > 1e-6f) {
+                    ((limiterCeiling - preservedPeak) / primaryPeak).coerceIn(0f, 1f)
+                } else 1f
+            } else 1f
+            primaryGainReduction = updateGain(primaryGainReduction, targetPrimaryGain, attackCoeff, releaseCoeff)
+
+            val stage1L = preservedL + primaryL * primaryGainReduction
+            val stage1R = preservedR + primaryR * primaryGainReduction
+
+            // Stage 2: only if still clipping after fully ducking primary, gently duck the highs too —
+            // and only apply half the theoretically-needed reduction, so it stays subtle.
+            val totalPeak = max(abs(stage1L + secondaryL), abs(stage1R + secondaryR))
+            val targetSecondaryGain = if (totalPeak > limiterCeiling) {
+                val stage1Peak = max(abs(stage1L), abs(stage1R))
+                val secondaryPeak = max(abs(secondaryL), abs(secondaryR))
+                val neededGain = if (secondaryPeak > 1e-6f) {
+                    ((limiterCeiling - stage1Peak) / secondaryPeak).coerceIn(0f, 1f)
+                } else 1f
+                1f - (1f - neededGain) * secondaryDuckBlend
+            } else 1f
+            secondaryGainReduction = updateGain(
+                secondaryGainReduction, targetSecondaryGain, secondaryAttackCoeff, secondaryReleaseCoeff
+            )
+
+            outSampleL = stage1L + secondaryL * secondaryGainReduction
+            outSampleR = stage1R + secondaryR * secondaryGainReduction
         }
+
+        // Final safety net, applied uniformly regardless of which branch ran above.
+        val finalPeak = max(abs(outSampleL), abs(outSampleR))
+        val targetSafetyGain = if (finalPeak > hardCeiling) hardCeiling / finalPeak else 1f
+        safetyGainReduction = updateGain(safetyGainReduction, targetSafetyGain, safetyAttackCoeff, safetyReleaseCoeff)
+        outSampleL *= safetyGainReduction
+        outSampleR *= safetyGainReduction
+    }
+
+    private fun updateGain(current: Float, target: Float, attack: Float, release: Float): Float {
+        val coeff = if (target < current) attack else release
+        return coeff * current + (1f - coeff) * target
     }
 
     fun getLeft() = outSampleL
     fun getRight() = outSampleR
-}*/
+}
 
-// DynamicBassEngine.kt
+
+/*// DynamicBassEngine.kt
 package com.theveloper.pixelplay.data.equalizer
 
 import kotlin.math.PI
@@ -436,4 +534,4 @@ class DynamicBassEngine(private val sampleRate: Float) {
 
     fun getLeft() = outSampleL
     fun getRight() = outSampleR
-}
+}*/
