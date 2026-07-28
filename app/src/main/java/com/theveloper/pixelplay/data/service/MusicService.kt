@@ -166,6 +166,9 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var navidromeRepository: NavidromeRepository
     @Inject
+    lateinit var dynamicBassManager: DynamicBassManager
+    private lateinit var headTracker: HeadOrientationTracker
+    @Inject
     lateinit var listeningStatsTracker: ListeningStatsTracker
     @Inject
     @AppScope
@@ -412,6 +415,11 @@ class MusicService : MediaLibraryService() {
             } else {
                 existingHandler?.uncaughtException(thread, throwable)
             }
+        }
+
+        headTracker = HeadOrientationTracker(this) { yawRadians ->
+            // Forward to the processor – safe even if processor is null
+            dynamicBassManager.getProcessor()?.setHeadYaw(yawRadians)
         }
 
         // A media-button startForegroundService() can reach MusicService directly (not always
@@ -1268,9 +1276,11 @@ class MusicService : MediaLibraryService() {
             syncLocalListeningStatsFromPlayer(player)
 
             if (isPlaying) {
+                haedTracker.start() 
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
             } else {
+                headTracker.stop() 
                 val state = if (player.playbackState == Player.STATE_ENDED) "stopped" else "paused"
                 reportNavidromePlayback(state)
                 stopNavidromePlaybackReporting()
@@ -1491,6 +1501,7 @@ class MusicService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
+        headTracker.stop() 
         PlaybackActivityTracker.setPlaybackActive(false)
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
