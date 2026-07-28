@@ -132,6 +132,12 @@ class DynamicBassManager @Inject constructor(
     private var dynamicBassProcessor: DynamicBassProcessor? = DynamicBassProcessor()
 
     private var headTracker: HeadOrientationTracker? = null
+
+    private val _headYaw = MutableStateFlow(0f)
+    val headYaw: StateFlow<Float> = _headYaw.asStateFlow()
+
+    private val _headTrackingEnabled = MutableStateFlow(false)
+    val headTrackingEnabled: StateFlow<Boolean> = _headTrackingEnabled.asStateFlow()
     
     private var headTrackingSmoothing = 0.85f
     
@@ -172,9 +178,10 @@ class DynamicBassManager @Inject constructor(
     // Called by MusicService to start tracking
     fun startHeadTracking(onYaw: (Float) -> Unit) {
         stopHeadTracking()
+        _headTrackingEnabled.value = true
         headTracker = HeadOrientationTracker(context) { yaw ->
+            _headYaw.value = yaw
             onYaw(yaw)
-            // also forward to the processor if needed
             dynamicBassProcessor?.setHeadYaw(yaw)
         }.apply {
             smoothing = headTrackingSmoothing
@@ -185,6 +192,7 @@ class DynamicBassManager @Inject constructor(
     fun stopHeadTracking() {
         headTracker?.stop()
         headTracker = null
+        _headTrackingEnabled.value = false
     }
 
     fun setHeadTrackingSmoothing(factor: Float) {
@@ -256,6 +264,32 @@ class DynamicBassManager @Inject constructor(
         dynamicBassProcessor?.setSideGain(gx, gy)
         Timber.tag(TAG).d("Side gain set to X: $gx, Y: $gy")
     }
+
+    fun setStereoWidth(percent: Float) {
+        dynamicBassProcessor?.setStereoWidth(percent)
+    }
+
+    fun setStereoBassProtectFrequency(freqHz: Float) {
+        dynamicBassProcessor?.setBassProtectFrequency(freqHz)
+    }
+
+    fun setSurroundBassPlacement(angleDegrees: Float, distanceMeters: Float) {
+        dynamicBassProcessor?.setBassPlacement(angleDegrees, distanceMeters)
+    }
+
+    fun setSurroundMidPlacement(angleDegrees: Float, distanceMeters: Float) {
+        dynamicBassProcessor?.setMidPlacement(angleDegrees, distanceMeters)
+    }
+
+    fun setSurroundTreblePlacement(angleDegrees: Float, distanceMeters: Float) {
+        dynamicBassProcessor?.setTreblePlacement(angleDegrees, distanceMeters)
+    }
+
+    fun setSurroundCrossovers(bassMidHz: Float, midTrebleHz: Float) {
+        dynamicBassProcessor?.setSurroundCrossoverFrequencies(bassMidHz, midTrebleHz)
+    }
+
+    fun getBassActivityLevel(): Float = dynamicBassProcessor?.getBassActivityLevel() ?: 0f
 
     fun release() {
         dynamicBassProcessor = null
