@@ -139,6 +139,13 @@ import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.utils.shapes.RoundedStarShape  // <- ensure this exists; if not, comment out and use CircleShape
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.PI
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -354,6 +361,7 @@ fun EqualizerScreen(
 
             // DynamicBass Controls
             item(key = "dynamic_bass_controls") {
+                val dynamicBassLevel by equalizerViewModel.dynamicBassLevel.collectAsStateWithLifecycle()
                 DynamicBassControlsSection(
                     dynamicBassEnabled = uiState.dynamicBassEnabled,
                     dynamicBassBassGain = uiState.dynamicBassBassGain,
@@ -363,6 +371,7 @@ fun EqualizerScreen(
                     dynamicBassFilterYHigh = uiState.dynamicBassFilterYHigh,
                     dynamicBassSideGainX = uiState.dynamicBassSideGainX,
                     dynamicBassSideGainY = uiState.dynamicBassSideGainY,
+                    dynamicBassLevel = dynamicBassLevel,
                     onDynamicBassEnabledChange = { equalizerViewModel.setDynamicBassEnabled(it) },
                     onBassGainChange = { equalizerViewModel.setDynamicBassBassGain(it) },
                     onFilterXChange = { low, high -> equalizerViewModel.setDynamicBassFilterX(low, high) },
@@ -375,18 +384,40 @@ fun EqualizerScreen(
             item(key = "stereo_widener_controls") {
                 StereoControlsSection(
                     stereoWidenerEnabled = uiState.stereoWidenerEnabled,
-                    onStereoWidenerEnabledChange = { equalizerViewModel.setStereoWidenerEnabled(it) }
+                    stereoWidth = uiState.stereoWidth,
+                    stereoBassProtectFreq = uiState.stereoBassProtectFreq,
+                    onStereoWidenerEnabledChange = { equalizerViewModel.setStereoWidenerEnabled(it) },
+                    onStereoWidthChange = { equalizerViewModel.setStereoWidth(it) },
+                    onStereoBassProtectFreqChange = { equalizerViewModel.setStereoBassProtectFreq(it) }
                 )
             }
 
             // SurroundSound Controls
             item(key = "surround_sound_controls") {
+                val headYaw by equalizerViewModel.headYaw.collectAsStateWithLifecycle()
                 SurroundControlsSection(
                     surroundEnabled = uiState.surroundEnabled,
-                    onSurroundEnabledChange = { equalizerViewModel.setSurroundEnabled(it) }
+                    headTrackingEnabled = uiState.headTrackingEnabled,
+                    headTrackingSmoothing = uiState.headTrackingSmoothing,
+                    headYaw = headYaw,
+                    bassAngle = uiState.surroundBassAngle,
+                    bassDistance = uiState.surroundBassDistance,
+                    midAngle = uiState.surroundMidAngle,
+                    midDistance = uiState.surroundMidDistance,
+                    trebleAngle = uiState.surroundTrebleAngle,
+                    trebleDistance = uiState.surroundTrebleDistance,
+                    crossoverBassMid = uiState.surroundCrossoverBassMid,
+                    crossoverMidTreble = uiState.surroundCrossoverMidTreble,
+                    onSurroundEnabledChange = { equalizerViewModel.setSurroundEnabled(it) },
+                    onHeadTrackingEnabledChange = { equalizerViewModel.setHeadTrackingEnabled(it) },
+                    onHeadTrackingSmoothingChange = { equalizerViewModel.setHeadTrackingSmoothing(it) },
+                    onBassPlacementChange = { angle, dist -> equalizerViewModel.setSurroundBassPlacement(angle, dist) },
+                    onMidPlacementChange = { angle, dist -> equalizerViewModel.setSurroundMidPlacement(angle, dist) },
+                    onTreblePlacementChange = { angle, dist -> equalizerViewModel.setSurroundTreblePlacement(angle, dist) },
+                    onCrossoversChange = { bm, mt -> equalizerViewModel.setSurroundCrossovers(bm, mt) }
                 )
             }
-
+            
             // Volume Control
             item(key = "volume_control") {
                 val volume by equalizerViewModel.systemVolume.collectAsStateWithLifecycle()
@@ -1847,6 +1878,109 @@ private fun HybridFrequencyResponseGraph(
 // ============================================================================
 //  YOUR DYNAMIC BASS CONTROLS (kept from your original file)
 // ============================================================================
+@Composable
+private fun LabeledSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    valueText: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium)
+            Text(text = valueText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(value = value, onValueChange = onValueChange, valueRange = valueRange, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun DynamicBassLevelMeter(level: Float, modifier: Modifier = Modifier) {
+    val animatedLevel by animateFloatAsState(
+        targetValue = level.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 60, easing = FastOutSlowInEasing),
+        label = "bassLevel"
+    )
+    Canvas(modifier = modifier.fillMaxWidth().height(28.dp)) {
+        val barCount = 24
+        val gap = 3.dp.toPx()
+        val barWidth = (size.width - gap * (barCount - 1)) / barCount
+        val activeBars = (animatedLevel * barCount).toInt()
+        for (i in 0 until barCount) {
+            val active = i < activeBars
+            val x = i * (barWidth + gap)
+            val heightFraction = 0.3f + 0.7f * (i / barCount.toFloat())
+            val barHeight = size.height * heightFraction
+            drawRoundRect(
+                color = if (active) Color(0xFFFF7043).copy(alpha = 0.9f) else Color.White.copy(alpha = 0.08f),
+                topLeft = Offset(x, size.height - barHeight),
+                size = Size(barWidth, barHeight),
+                cornerRadius = CornerRadius(2.dp.toPx())
+            )
+        }
+    }
+}
+
+@Composable
+private fun SurroundFieldVisualizer(
+    headYawRad: Float,
+    bassAngle: Float, bassDistance: Float,
+    midAngle: Float, midDistance: Float,
+    trebleAngle: Float, trebleDistance: Float,
+    modifier: Modifier = Modifier
+) {
+    val animatedYaw by animateFloatAsState(
+        targetValue = headYawRad,
+        animationSpec = tween(durationMillis = 80, easing = FastOutSlowInEasing),
+        label = "headYaw"
+    )
+
+    Canvas(modifier = modifier.fillMaxWidth().height(180.dp)) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val maxRadius = size.minDimension / 2f * 0.85f
+
+        for (fraction in listOf(0.33f, 0.66f, 1f)) {
+            drawCircle(
+                color = Color.White.copy(alpha = 0.08f),
+                radius = maxRadius * fraction,
+                center = center,
+                style = Stroke(width = 1.dp.toPx())
+            )
+        }
+
+        fun placeSpeaker(angleDeg: Float, distanceM: Float, mirrored: Boolean, color: Color) {
+            val signedAngle = if (mirrored) -angleDeg else angleDeg
+            val angleRad = signedAngle * PI.toFloat() / 180f
+            val normDist = (distanceM / 2f).coerceIn(0.15f, 1f) // 2m fills the outer ring — display scale only
+            val x = center.x + sin(angleRad) * maxRadius * normDist
+            val y = center.y - cos(angleRad) * maxRadius * normDist
+            drawCircle(color = color, radius = 6.dp.toPx(), center = Offset(x, y))
+        }
+
+        placeSpeaker(bassAngle, bassDistance, mirrored = false, color = Color(0xFFEF5350))
+        placeSpeaker(bassAngle, bassDistance, mirrored = true, color = Color(0xFFEF5350))
+        placeSpeaker(midAngle, midDistance, mirrored = false, color = Color(0xFF66BB6A))
+        placeSpeaker(midAngle, midDistance, mirrored = true, color = Color(0xFF66BB6A))
+        placeSpeaker(trebleAngle, trebleDistance, mirrored = false, color = Color(0xFF42A5F5))
+        placeSpeaker(trebleAngle, trebleDistance, mirrored = true, color = Color(0xFF42A5F5))
+
+        rotate(degrees = animatedYaw * 180f / PI.toFloat(), pivot = center) {
+            drawCircle(color = Color.White, radius = 10.dp.toPx(), center = center)
+            drawLine(
+                color = Color.White,
+                start = center,
+                end = Offset(center.x, center.y - 18.dp.toPx()),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
 
 @Composable
 private fun DynamicBassControlsSection(
@@ -1858,6 +1992,7 @@ private fun DynamicBassControlsSection(
     dynamicBassFilterYHigh: Float,
     dynamicBassSideGainX: Float,
     dynamicBassSideGainY: Float,
+    dynamicBassLevel: Float,
     onDynamicBassEnabledChange: (Boolean) -> Unit,
     onBassGainChange: (Float) -> Unit,
     onFilterXChange: (Float, Float) -> Unit,
@@ -1895,6 +2030,9 @@ private fun DynamicBassControlsSection(
             }
 
             if (dynamicBassEnabled) {
+
+                DynamicBassLevelMeter(level = dynamicBassLevel)
+                
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2068,35 +2206,35 @@ private fun DynamicBassControlsSection(
 @Composable
 private fun StereoControlsSection(
     stereoWidenerEnabled: Boolean,
+    stereoWidth: Float,
+    stereoBassProtectFreq: Float,
     onStereoWidenerEnabledChange: (Boolean) -> Unit,
+    onStereoWidthChange: (Float) -> Unit,
+    onStereoBassProtectFreqChange: (Float) -> Unit,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = RoundedCornerShape(24.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Stereo Expand",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                Text(text = "Stereo Expand", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Switch(checked = stereoWidenerEnabled, onCheckedChange = onStereoWidenerEnabledChange, modifier = Modifier.scale(0.8f))
+            }
+
+            if (stereoWidenerEnabled) {
+                LabeledSlider(
+                    label = "Width", value = stereoWidth, onValueChange = onStereoWidthChange,
+                    valueRange = 0f..2f, valueText = "${(stereoWidth * 100).toInt()}%"
                 )
-                Switch(
-                    checked = stereoWidenerEnabled,
-                    onCheckedChange = onStereoWidenerEnabledChange,
-                    modifier = Modifier.scale(0.8f)
+                LabeledSlider(
+                    label = "Bass Protect", value = stereoBassProtectFreq, onValueChange = onStereoBassProtectFreqChange,
+                    valueRange = 20f..500f, valueText = "${stereoBassProtectFreq.toInt()} Hz"
                 )
             }
         }
@@ -2106,36 +2244,67 @@ private fun StereoControlsSection(
 @Composable
 private fun SurroundControlsSection(
     surroundEnabled: Boolean,
+    headTrackingEnabled: Boolean,
+    headTrackingSmoothing: Float,
+    headYaw: Float,
+    bassAngle: Float, bassDistance: Float,
+    midAngle: Float, midDistance: Float,
+    trebleAngle: Float, trebleDistance: Float,
+    crossoverBassMid: Float, crossoverMidTreble: Float,
     onSurroundEnabledChange: (Boolean) -> Unit,
+    onHeadTrackingEnabledChange: (Boolean) -> Unit,
+    onHeadTrackingSmoothingChange: (Float) -> Unit,
+    onBassPlacementChange: (Float, Float) -> Unit,
+    onMidPlacementChange: (Float, Float) -> Unit,
+    onTreblePlacementChange: (Float, Float) -> Unit,
+    onCrossoversChange: (Float, Float) -> Unit,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = RoundedCornerShape(24.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Surround Sound",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                Text(text = "Surround Sound", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Switch(checked = surroundEnabled, onCheckedChange = onSurroundEnabledChange, modifier = Modifier.scale(0.8f))
+            }
+
+            if (surroundEnabled) {
+                SurroundFieldVisualizer(
+                    headYawRad = headYaw,
+                    bassAngle = bassAngle, bassDistance = bassDistance,
+                    midAngle = midAngle, midDistance = midDistance,
+                    trebleAngle = trebleAngle, trebleDistance = trebleDistance
                 )
-                Switch(
-                    checked = surroundEnabled,
-                    onCheckedChange = onSurroundEnabledChange,
-                    modifier = Modifier.scale(0.8f)
-                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "Head Tracking", style = MaterialTheme.typography.labelMedium)
+                    Switch(checked = headTrackingEnabled, onCheckedChange = onHeadTrackingEnabledChange, modifier = Modifier.scale(0.8f))
+                }
+                if (headTrackingEnabled) {
+                    LabeledSlider(
+                        label = "Smoothing", value = headTrackingSmoothing, onValueChange = onHeadTrackingSmoothingChange,
+                        valueRange = 0.1f..1f, valueText = "${(headTrackingSmoothing * 100).toInt()}%"
+                    )
+                }
+
+                LabeledSlider("Bass Angle", bassAngle, { onBassPlacementChange(it, bassDistance) }, 0f..90f, "${bassAngle.toInt()}°")
+                LabeledSlider("Bass Distance", bassDistance, { onBassPlacementChange(bassAngle, it) }, 0.5f..3f, "${bassDistance}m")
+                LabeledSlider("Mid Angle", midAngle, { onMidPlacementChange(it, midDistance) }, 0f..90f, "${midAngle.toInt()}°")
+                LabeledSlider("Mid Distance", midDistance, { onMidPlacementChange(midAngle, it) }, 0.5f..3f, "${midDistance}m")
+                LabeledSlider("Treble Angle", trebleAngle, { onTreblePlacementChange(it, trebleDistance) }, 0f..90f, "${trebleAngle.toInt()}°")
+                LabeledSlider("Treble Distance", trebleDistance, { onTreblePlacementChange(trebleAngle, it) }, 0.5f..3f, "${trebleDistance}m")
+                LabeledSlider("Crossover Bass/Mid", crossoverBassMid, { onCrossoversChange(it, crossoverMidTreble) }, 60f..800f, "${crossoverBassMid.toInt()} Hz")
+                LabeledSlider("Crossover Mid/Treble", crossoverMidTreble, { onCrossoversChange(crossoverBassMid, it) }, 1500f..8000f, "${crossoverMidTreble.toInt()} Hz")
             }
         }
     }
