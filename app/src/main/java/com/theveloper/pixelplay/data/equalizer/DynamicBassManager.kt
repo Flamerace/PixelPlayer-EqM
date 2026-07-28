@@ -216,6 +216,18 @@ class DynamicBassManager @Inject constructor(
         Timber.tag(TAG).d("DynamicBass enabled: $enabled")
     }
 
+    fun setStereoEnabled(enabled: Boolean) {
+        _isEnabled.value = enabled
+        dynamicBassProcessor?.widenerEnabled(enabled)
+        Timber.tag(TAG).d("StereoWidener enabled: $enabled")
+    }
+
+    fun setSurroundEnabled(enabled: Boolean) {
+        _isEnabled.value = enabled
+        dynamicBassProcessor?.surroundEnabled(enabled)
+        Timber.tag(TAG).d("SurroundSound enabled: $enabled")
+    }
+
     fun setBassGain(gain: Float) {
         val clamped = gain.coerceIn(0f, 1f)
         _bassGain.value = clamped
