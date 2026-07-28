@@ -14,7 +14,7 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     private var surround = SurroundImagingEngine(44100f)
     private var isEnabled = true
     private var widenerEnabled = false
-    private var surroundEnabled = false
+    private var surroundEnabled = true
 
     // Cached values so they survive engine rebuilds in onConfigure().
     // These mirror the eel preset's own @init defaults (dBassGain=45, dX1=1200,
