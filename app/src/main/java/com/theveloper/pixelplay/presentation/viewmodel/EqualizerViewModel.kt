@@ -57,6 +57,10 @@ data class EqualizerUiState(
     val dynamicBassFilterYHigh: Float = 200f,
     val dynamicBassSideGainX: Float = 0f,
     val dynamicBassSideGainY: Float = 0f,
+    // StereoExpand state
+    val stereoWidenerEnabled: Boolean = false,
+    // SurroundSound state
+    val surroundEnabled: Boolean = false,
 ) {
     // Computed property for accessible presets (Pinned)
     val accessiblePresets: List<EqualizerPreset>
@@ -216,7 +220,9 @@ class EqualizerViewModel @Inject constructor(
                 equalizerPreferencesRepository.dynamicBassFilterYLowFlow,
                 equalizerPreferencesRepository.dynamicBassFilterYHighFlow,
                 equalizerPreferencesRepository.dynamicBassSideGainXFlow,
-                equalizerPreferencesRepository.dynamicBassSideGainYFlow
+                equalizerPreferencesRepository.dynamicBassSideGainYFlow,
+                equalizerPreferencesRepository.stereoWidenerEnabledFlow,
+                equalizerPreferencesRepository.surroundEnabledFlow
             ) { values -> // Too many args for standard destructuring, use array/list access
                  val enabled = values[0] as Boolean
                  val presetName = values[1] as String
@@ -244,6 +250,10 @@ class EqualizerViewModel @Inject constructor(
                  val dbFilterYHigh = values[20] as Float
                  val dbSideGainX = values[21] as Float
                  val dbSideGainY = values[22] as Float
+                 // StereoExpand values
+                 val seEnabled = values[23] as Boolean
+                 // SurroundSound values
+                 val ssEnabled = values[24] as Boolean
 
                 val currentPreset = if (presetName == "custom") {
                     EqualizerPreset.custom(customBands)
@@ -283,7 +293,11 @@ class EqualizerViewModel @Inject constructor(
                     dynamicBassFilterYLow = dbFilterYLow,
                     dynamicBassFilterYHigh = dbFilterYHigh,
                     dynamicBassSideGainX = dbSideGainX,
-                    dynamicBassSideGainY = dbSideGainY
+                    dynamicBassSideGainY = dbSideGainY,
+                    // StereoExpand state
+                    stereoWidenerEnabled = seEnabled,
+                    // SurroundSound state
+                    surroundEnabled = ssEnabled
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -584,6 +598,35 @@ class EqualizerViewModel @Inject constructor(
             equalizerPreferencesRepository.setDynamicBassSideGain(gx, gy)
         }
     }
+
+    // StereoExpand control methods
+
+    fun setStereoExpandEnabled(enabled: Boolean) {
+        dynamicBassManager.setStereoEnabled(enabled)
+        _uiState.update { current ->
+            current.copy(stereoWidenerEnabled = enabled)
+        }
+        viewModelScope.launch {
+            val sampleRate = dualPlayerEngine.currentAudioFormatSnapshot()?.sampleRate ?: 44100
+            dynamicBassManager.initializeProcessor(sampleRate)
+            equalizerPreferencesRepository.setStereoWidenerEnabled(enabled)
+        }
+    }
+
+    // SurroundSound control method
+
+    fun setSurroundEnabled(enabled: Boolean) {
+        dynamicBassManager.setSurroundEnabled(enabled)
+        _uiState.update { current ->
+            current.copy(surroundEnabled = enabled)
+        }
+        viewModelScope.launch {
+            val sampleRate = dualPlayerEngine.currentAudioFormatSnapshot()?.sampleRate ?: 44100
+            dynamicBassManager.initializeProcessor(sampleRate)
+            equalizerPreferencesRepository.setSurroundEnabled(enabled)
+        }
+    }
+    
     
     /**
      * Reattaches the equalizer to a new audio session.
@@ -616,6 +659,9 @@ class EqualizerViewModel @Inject constructor(
                 equalizerPreferencesRepository.setDynamicBassFilterX(latest.dynamicBassFilterXLow, latest.dynamicBassFilterXHigh)
                 equalizerPreferencesRepository.setDynamicBassFilterY(latest.dynamicBassFilterYLow, latest.dynamicBassFilterYHigh)
                 equalizerPreferencesRepository.setDynamicBassSideGain(latest.dynamicBassSideGainX, latest.dynamicBassSideGainY)
+                // StereoExpand presistance
+                equalizerPreferencesRepository.setStereoWidenerEnabled(latest.stereoWidenerEnabled)
+                equalizerPreferencesRepository.setSurroundEnabled(latest.surroundEnabled)
             }.onFailure { error ->
                 Timber.tag(TAG).w(error, "Failed to flush equalizer state during onCleared")
             }
