@@ -52,7 +52,7 @@ class HeadOrientationTracker(
     // This is a control-rate signal (SurroundImagingEngine only samples it once per audio
     // buffer), so smoothing costs nothing in responsiveness that actually matters, and tames
     // raw-magnetometer jitter noticeably.
-    private val smoothing = 0.85f
+    var smoothing = 0.85f
         set(value) {
             field = value.coerceIn(0.1f, 1.0f)
         }
