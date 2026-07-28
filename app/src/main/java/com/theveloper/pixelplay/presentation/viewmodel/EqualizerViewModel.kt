@@ -9,6 +9,7 @@ import com.theveloper.pixelplay.data.preferences.EqualizerPreferencesRepository
 import com.theveloper.pixelplay.data.preferences.EqualizerViewMode
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,8 +60,20 @@ data class EqualizerUiState(
     val dynamicBassSideGainY: Float = 0f,
     // StereoExpand state
     val stereoWidenerEnabled: Boolean = false,
+    val stereoWidth: Float = 1.0f,          // 1.0 = 100%
+    val stereoBassProtectFreq: Float = 200f,
     // SurroundSound state
     val surroundEnabled: Boolean = false,
+    val headTrackingEnabled: Boolean = false,
+    val headTrackingSmoothing: Float = 0.85f,
+    val surroundBassAngle: Float = 15f,
+    val surroundBassDistance: Float = 1.5f,
+    val surroundMidAngle: Float = 25f,
+    val surroundMidDistance: Float = 1.5f,
+    val surroundTrebleAngle: Float = 30f,
+    val surroundTrebleDistance: Float = 1.5f,
+    val surroundCrossoverBassMid: Float = 250f,
+    val surroundCrossoverMidTreble: Float = 4000f,
 ) {
     // Computed property for accessible presets (Pinned)
     val accessiblePresets: List<EqualizerPreset>
@@ -105,6 +118,15 @@ class EqualizerViewModel @Inject constructor(
     private val _systemVolume = MutableStateFlow(0f)
     val systemVolume: StateFlow<Float> = _systemVolume.asStateFlow()
 
+    val headYaw: StateFlow<Float> = dynamicBassManager.headYaw
+
+    val dynamicBassLevel: StateFlow<Float> = flow {
+        while (true) {
+            emit(dynamicBassManager.getBassActivityLevel())
+            delay(33) // ~30fps poll of one Volatile Float; only runs while a collector exists
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(1000), 0f)
+    
     private var persistBandLevelsJob: Job? = null
     private var persistBassBoostJob: Job? = null
     private var persistVirtualizerJob: Job? = null
@@ -222,7 +244,19 @@ class EqualizerViewModel @Inject constructor(
                 equalizerPreferencesRepository.dynamicBassSideGainXFlow,
                 equalizerPreferencesRepository.dynamicBassSideGainYFlow,
                 equalizerPreferencesRepository.stereoWidenerEnabledFlow,
-                equalizerPreferencesRepository.surroundEnabledFlow
+                equalizerPreferencesRepository.surroundEnabledFlow,
+                equalizerPreferencesRepository.stereoWidthFlow,
+                equalizerPreferencesRepository.stereoBassProtectFreqFlow,
+                equalizerPreferencesRepository.headTrackingEnabledFlow,
+                equalizerPreferencesRepository.headTrackingSmoothingFlow,
+                equalizerPreferencesRepository.surroundBassAngleFlow,
+                equalizerPreferencesRepository.surroundBassDistanceFlow,
+                equalizerPreferencesRepository.surroundMidAngleFlow,
+                equalizerPreferencesRepository.surroundMidDistanceFlow,
+                equalizerPreferencesRepository.surroundTrebleAngleFlow,
+                equalizerPreferencesRepository.surroundTrebleDistanceFlow,
+                equalizerPreferencesRepository.surroundCrossoverBassMidFlow,
+                equalizerPreferencesRepository.surroundCrossoverMidTrebleFlow
             ) { values -> // Too many args for standard destructuring, use array/list access
                  val enabled = values[0] as Boolean
                  val presetName = values[1] as String
@@ -252,8 +286,20 @@ class EqualizerViewModel @Inject constructor(
                  val dbSideGainY = values[22] as Float
                  // StereoExpand values
                  val seEnabled = values[23] as Boolean
+                 val stWidth = values[25] as Float
+                 val stBassProtect = values[26] as Float
                  // SurroundSound values
                  val ssEnabled = values[24] as Boolean
+                 val htEnabled = values[27] as Boolean
+                 val htSmoothing = values[28] as Float
+                 val srBassAngle = values[29] as Float
+                 val srBassDistance = values[30] as Float
+                 val srMidAngle = values[31] as Float
+                 val srMidDistance = values[32] as Float
+                 val srTrebleAngle = values[33] as Float
+                 val srTrebleDistance = values[34] as Float
+                 val srCrossBassMid = values[35] as Float
+                 val srCrossMidTreble = values[36] as Float
 
                 val currentPreset = if (presetName == "custom") {
                     EqualizerPreset.custom(customBands)
@@ -296,8 +342,20 @@ class EqualizerViewModel @Inject constructor(
                     dynamicBassSideGainY = dbSideGainY,
                     // StereoExpand state
                     stereoWidenerEnabled = seEnabled,
+                    stereoWidth = stWidth,
+                    stereoBassProtectFreq = stBassProtect,
                     // SurroundSound state
-                    surroundEnabled = ssEnabled
+                    surroundEnabled = ssEnabled,
+                    headTrackingEnabled = htEnabled,
+                    headTrackingSmoothing = htSmoothing,
+                    surroundBassAngle = srBassAngle,
+                    surroundBassDistance = srBassDistance,
+                    surroundMidAngle = srMidAngle,
+                    surroundMidDistance = srMidDistance,
+                    surroundTrebleAngle = srTrebleAngle,
+                    surroundTrebleDistance = srTrebleDistance,
+                    surroundCrossoverBassMid = srCrossBassMid,
+                    surroundCrossoverMidTreble = srCrossMidTreble
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -613,6 +671,19 @@ class EqualizerViewModel @Inject constructor(
         }
     }
 
+    fun setStereoWidth(width: Float) {
+        val clamped = width.coerceIn(0f, 2f)
+        dynamicBassManager.setStereoWidth(clamped * 100f) // processor's API is percent-based
+        _uiState.update { it.copy(stereoWidth = clamped) }
+        viewModelScope.launch { equalizerPreferencesRepository.setStereoWidth(clamped) }
+    }
+
+    fun setStereoBassProtectFreq(freqHz: Float) {
+        dynamicBassManager.setStereoBassProtectFrequency(freqHz)
+        _uiState.update { it.copy(stereoBassProtectFreq = freqHz) }
+        viewModelScope.launch { equalizerPreferencesRepository.setStereoBassProtectFreq(freqHz) }
+    }
+
     // SurroundSound control method
 
     fun setSurroundEnabled(enabled: Boolean) {
@@ -625,6 +696,43 @@ class EqualizerViewModel @Inject constructor(
             dynamicBassManager.initializeProcessor(sampleRate)
             equalizerPreferencesRepository.setSurroundEnabled(enabled)
         }
+    }
+
+    fun setHeadTrackingEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(headTrackingEnabled = enabled) }
+        if (enabled) dynamicBassManager.startHeadTracking { } else dynamicBassManager.stopHeadTracking()
+        viewModelScope.launch { equalizerPreferencesRepository.setHeadTrackingEnabled(enabled) }
+    }
+
+    fun setHeadTrackingSmoothing(factor: Float) {
+        val clamped = factor.coerceIn(0.1f, 1f)
+        dynamicBassManager.setHeadTrackingSmoothing(clamped)
+        _uiState.update { it.copy(headTrackingSmoothing = clamped) }
+        viewModelScope.launch { equalizerPreferencesRepository.setHeadTrackingSmoothing(clamped) }
+    }
+
+    fun setSurroundBassPlacement(angleDegrees: Float, distanceMeters: Float) {
+        dynamicBassManager.setSurroundBassPlacement(angleDegrees, distanceMeters)
+        _uiState.update { it.copy(surroundBassAngle = angleDegrees, surroundBassDistance = distanceMeters) }
+        viewModelScope.launch { equalizerPreferencesRepository.setSurroundBassPlacement(angleDegrees, distanceMeters) }
+    }
+
+    fun setSurroundMidPlacement(angleDegrees: Float, distanceMeters: Float) {
+        dynamicBassManager.setSurroundMidPlacement(angleDegrees, distanceMeters)
+        _uiState.update { it.copy(surroundMidAngle = angleDegrees, surroundMidDistance = distanceMeters) }
+        viewModelScope.launch { equalizerPreferencesRepository.setSurroundMidPlacement(angleDegrees, distanceMeters) }
+    }
+
+    fun setSurroundTreblePlacement(angleDegrees: Float, distanceMeters: Float) {
+        dynamicBassManager.setSurroundTreblePlacement(angleDegrees, distanceMeters)
+        _uiState.update { it.copy(surroundTrebleAngle = angleDegrees, surroundTrebleDistance = distanceMeters) }
+        viewModelScope.launch { equalizerPreferencesRepository.setSurroundTreblePlacement(angleDegrees, distanceMeters) }
+    }
+
+    fun setSurroundCrossovers(bassMidHz: Float, midTrebleHz: Float) {
+        dynamicBassManager.setSurroundCrossovers(bassMidHz, midTrebleHz)
+        _uiState.update { it.copy(surroundCrossoverBassMid = bassMidHz, surroundCrossoverMidTreble = midTrebleHz) }
+        viewModelScope.launch { equalizerPreferencesRepository.setSurroundCrossovers(bassMidHz, midTrebleHz) }
     }
     
     
@@ -662,6 +770,14 @@ class EqualizerViewModel @Inject constructor(
                 // StereoExpand presistance
                 equalizerPreferencesRepository.setStereoWidenerEnabled(latest.stereoWidenerEnabled)
                 equalizerPreferencesRepository.setSurroundEnabled(latest.surroundEnabled)
+                equalizerPreferencesRepository.setStereoWidth(latest.stereoWidth)
+                equalizerPreferencesRepository.setStereoBassProtectFreq(latest.stereoBassProtectFreq)                
+                equalizerPreferencesRepository.setHeadTrackingEnabled(latest.headTrackingEnabled)
+                equalizerPreferencesRepository.setHeadTrackingSmoothing(latest.headTrackingSmoothing)
+                equalizerPreferencesRepository.setSurroundBassPlacement(latest.surroundBassAngle, latest.surroundBassDistance)
+                equalizerPreferencesRepository.setSurroundMidPlacement(latest.surroundMidAngle, latest.surroundMidDistance)
+                equalizerPreferencesRepository.setSurroundTreblePlacement(latest.surroundTrebleAngle, latest.surroundTrebleDistance)
+                equalizerPreferencesRepository.setSurroundCrossovers(latest.surroundCrossoverBassMid, latest.surroundCrossoverMidTreble)
             }.onFailure { error ->
                 Timber.tag(TAG).w(error, "Failed to flush equalizer state during onCleared")
             }
