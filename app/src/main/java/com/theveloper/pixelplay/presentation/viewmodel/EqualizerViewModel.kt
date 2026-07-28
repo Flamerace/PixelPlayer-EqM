@@ -601,7 +601,7 @@ class EqualizerViewModel @Inject constructor(
 
     // StereoExpand control methods
 
-    fun setStereoExpandEnabled(enabled: Boolean) {
+    fun setStereoWidenerEnabled(enabled: Boolean) {
         dynamicBassManager.setStereoEnabled(enabled)
         _uiState.update { current ->
             current.copy(stereoWidenerEnabled = enabled)
