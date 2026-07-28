@@ -6,6 +6,9 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * One-pole low-pass, used here as the "head shadow" filter: the ear on the far side of a
@@ -61,6 +64,57 @@ internal class FractionalDelayLine(private val size: Int) {
 }
 
 /**
+ * Minimal RBJ-cookbook biquad (peaking / high-shelf). Used to approximate the gross
+ * front/back spectral cue a real pinna imparts — ITD and ILD alone are symmetric
+ * front-to-back (the classic "cone of confusion"), so without this, a source directly
+ * ahead and one directly behind render identically. This is still a parametric
+ * approximation, not a convolution against a measured HRTF/SOFA dataset, but it's the
+ * cue that's actually missing, so it's the highest-value thing to add without that asset.
+ */
+internal class Biquad(private val sampleRate: Float) {
+    private var b0 = 1f; private var b1 = 0f; private var b2 = 0f
+    private var a1 = 0f; private var a2 = 0f
+    private var x1 = 0f; private var x2 = 0f
+    private var y1 = 0f; private var y2 = 0f
+
+    fun setPeaking(freqHz: Float, gainDb: Float, q: Float) {
+        val a = 10f.pow(gainDb / 40f)
+        val w0 = 2f * PI.toFloat() * (freqHz / sampleRate).coerceIn(0.001f, 0.49f)
+        val alpha = kotlin.math.sin(w0) / (2f * q)
+        val cosw0 = cos(w0)
+
+        val a0n = 1f + alpha / a
+        b0 = (1f + alpha * a) / a0n
+        b1 = (-2f * cosw0) / a0n
+        b2 = (1f - alpha * a) / a0n
+        a1 = (-2f * cosw0) / a0n
+        a2 = (1f - alpha / a) / a0n
+    }
+
+    fun setHighShelf(freqHz: Float, gainDb: Float) {
+        val a = 10f.pow(gainDb / 40f)
+        val w0 = 2f * PI.toFloat() * (freqHz / sampleRate).coerceIn(0.001f, 0.49f)
+        val cosw0 = cos(w0)
+        val alpha = kotlin.math.sin(w0) / 2f * sqrt(2f) // shelf slope S = 1
+        val twoSqrtAalpha = 2f * sqrt(a) * alpha
+
+        val a0n = (a + 1f) - (a - 1f) * cosw0 + twoSqrtAalpha
+        b0 = a * ((a + 1f) + (a - 1f) * cosw0 + twoSqrtAalpha) / a0n
+        b1 = (-2f * a * ((a - 1f) + (a + 1f) * cosw0)) / a0n
+        b2 = a * ((a + 1f) + (a - 1f) * cosw0 - twoSqrtAalpha) / a0n
+        a1 = (2f * ((a - 1f) - (a + 1f) * cosw0)) / a0n
+        a2 = ((a + 1f) - (a - 1f) * cosw0 - twoSqrtAalpha) / a0n
+    }
+
+    fun process(x: Float): Float {
+        val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+        x2 = x1; x1 = x
+        y2 = y1; y1 = y
+        return y
+    }
+}
+
+/**
  * Renders one mono virtual point source (a fixed angle + distance, "calibrated" once) into a
  * stereo contribution using ITD (Woodworth's spherical-head formula), a broadband ILD term, and
  * head-shadow low-pass filtering on the far ear. Distance uses simple inverse-distance
@@ -79,6 +133,7 @@ internal class BinauralSource(private val sampleRate: Float) {
     private val delayLine = FractionalDelayLine(MAX_DELAY_SAMPLES)
     private val leftShadowFilter = OnePoleLowPass(sampleRate)
     private val rightShadowFilter = OnePoleLowPass(sampleRate)
+    private val pinnaFilter = Biquad(sampleRate)
 
     private var leftDelaySamples = 0f
     private var rightDelaySamples = 0f
@@ -108,6 +163,15 @@ internal class BinauralSource(private val sampleRate: Float) {
         val ildGain = 1f - 0.3f * shadowAmount
         val shadowCutoff = 1500f + (20000f - 1500f) * (1f - shadowAmount)
 
+        // Frontal sources get a mild concha-resonance lift; rear sources lose it and
+        // pick up extra HF shadowing — this is what actually differentiates front/back.
+        val isFront = absTheta <= HALF_PI
+        if (isFront) {
+            pinnaFilter.setPeaking(3200f, 3f, 1.2f)
+        } else {
+            pinnaFilter.setHighShelf(6000f, -6f)
+        }
+        
         if (sign >= 0f) {
             // Source to the right: right ear is near (0 extra delay), left ear is far.
             rightDelaySamples = 0f
@@ -126,8 +190,16 @@ internal class BinauralSource(private val sampleRate: Float) {
         }
     }
 
-    fun process(mono: Float) {
+    /*fun process(mono: Float) {
         delayLine.write(mono)
+        val leftRaw = delayLine.read(leftDelaySamples)
+        val rightRaw = delayLine.read(rightDelaySamples)
+        outLeft = leftShadowFilter.process(leftRaw) * leftGain
+        outRight = rightShadowFilter.process(rightRaw) * rightGain
+    }*/
+
+    fun process(mono: Float) {
+        delayLine.write(pinnaFilter.process(mono))
         val leftRaw = delayLine.read(leftDelaySamples)
         val rightRaw = delayLine.read(rightDelaySamples)
         outLeft = leftShadowFilter.process(leftRaw) * leftGain
