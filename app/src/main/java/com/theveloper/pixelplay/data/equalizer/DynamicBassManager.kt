@@ -127,6 +127,10 @@ class DynamicBassManager @Inject constructor() {
     // automatically via onConfigure() once the format is known.
     private var dynamicBassProcessor: DynamicBassProcessor? = DynamicBassProcessor()
 
+    private var headTracker: HeadOrientationTracker? = null
+    
+    private var headTrackingSmoothing = 0.85f
+    
     // State flows for UI binding
     private val _isEnabled = MutableStateFlow(false)
     val isEnabled: StateFlow<Boolean> = _isEnabled.asStateFlow()
@@ -161,6 +165,29 @@ class DynamicBassManager @Inject constructor() {
         dynamicBassProcessor?.setSideGain(_sideGainX.value, _sideGainY.value)
     }
 
+    // Called by MusicService to start tracking
+    fun startHeadTracking(onYaw: (Float) -> Unit) {
+        headTracker?.stop()
+        headTracker = HeadOrientationTracker(context) { yaw ->
+            onYaw(yaw)
+            // also forward to the processor if needed
+            dynamicBassProcessor?.setHeadYaw(yaw)
+        }.apply {
+            smoothing = headTrackingSmoothing
+            start()
+        }
+    }
+
+    fun stopHeadTracking() {
+        headTracker?.stop()
+        headTracker = null
+    }
+
+    fun setHeadTrackingSmoothing(factor: Float) {
+        headTrackingSmoothing = factor.coerceIn(0.1f, 1.0f)
+        headTracker?.smoothing = headTrackingSmoothing
+    }
+    
     /**
      * Kept for compatibility with existing callers (e.g. DualPlayerEngine's
      * onAudioInputFormatChanged listener). No longer does the actual setup —
