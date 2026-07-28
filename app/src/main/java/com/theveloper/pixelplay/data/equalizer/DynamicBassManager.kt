@@ -218,13 +218,13 @@ class DynamicBassManager @Inject constructor(
 
     fun setStereoEnabled(enabled: Boolean) {
         _isEnabled.value = enabled
-        dynamicBassProcessor?.widenerEnabled(enabled)
+        dynamicBassProcessor?.setWidenerEnabled(enabled)
         Timber.tag(TAG).d("StereoWidener enabled: $enabled")
     }
 
     fun setSurroundEnabled(enabled: Boolean) {
         _isEnabled.value = enabled
-        dynamicBassProcessor?.surroundEnabled(enabled)
+        dynamicBassProcessor?.setSurroundEnabled(enabled)
         Timber.tag(TAG).d("SurroundSound enabled: $enabled")
     }
 
