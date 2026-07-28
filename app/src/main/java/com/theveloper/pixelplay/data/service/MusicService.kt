@@ -68,7 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.theveloper.pixelplay.data.equalizer.DynamicBassManager
-//import com.theveloper.pixelplay.data.equalizer.HeadOrientationTracker
+import com.theveloper.pixelplay.data.equalizer.HeadOrientationTracker
 import com.theveloper.pixelplay.data.equalizer.EqualizerManager
 import com.theveloper.pixelplay.data.model.WidgetThemeColors
 import com.theveloper.pixelplay.data.preferences.AlbumArtColorAccuracy
@@ -419,10 +419,7 @@ class MusicService : MediaLibraryService() {
             }
         }
 
-        dynamicBassManager.startHeadTracking { yaw ->
-            // yaw is already forwarded to processor inside manager
-            // but you can also do additional logic here if needed
-        }
+        dynamicBassManager.startHeadTracking {}
         /*headTracker = HeadOrientationTracker(this) { yawRadians ->
             // Forward to the processor – safe even if processor is null
             dynamicBassManager.getProcessor()?.setHeadYaw(yawRadians)
@@ -1282,7 +1279,7 @@ class MusicService : MediaLibraryService() {
             syncLocalListeningStatsFromPlayer(player)
 
             if (isPlaying) {
-                dynamicBassManager.startHeadTracking { ... }
+                dynamicBassManager.startHeadTracking {}
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
             } else {
