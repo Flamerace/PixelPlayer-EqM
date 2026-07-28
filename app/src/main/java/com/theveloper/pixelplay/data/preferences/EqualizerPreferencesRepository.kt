@@ -181,11 +181,11 @@ class EqualizerPreferencesRepository @Inject constructor(
     }
 
     val dynamicBassFilterXLowFlow: Flow<Float> = dataStore.data.map { preferences ->
-        preferences[Keys.DYNAMIC_BASS_FILTER_X_LOW] ?: 50f
+        preferences[Keys.DYNAMIC_BASS_FILTER_X_LOW] ?: 350f
     }
 
     val dynamicBassFilterXHighFlow: Flow<Float> = dataStore.data.map { preferences ->
-        preferences[Keys.DYNAMIC_BASS_FILTER_X_HIGH] ?: 250f
+        preferences[Keys.DYNAMIC_BASS_FILTER_X_HIGH] ?: 5000f
     }
 
     val dynamicBassFilterYLowFlow: Flow<Float> = dataStore.data.map { preferences ->
@@ -209,10 +209,24 @@ class EqualizerPreferencesRepository @Inject constructor(
         preferences[Keys.STEREO_WIDENER_ENABLED] ?: false
     }
 
+    val stereoWidthFlow: Flow<Float> = dataStore.data.map { it[Keys.STEREO_WIDTH] ?: 1.0f }
+    val stereoBassProtectFreqFlow: Flow<Float> = dataStore.data.map { it[Keys.STEREO_BASS_PROTECT] ?: 200f }
+
     // SurroundSound flows
     val surroundEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[Keys.SURROUND_ENABLED] ?: false
     }
+
+    val headTrackingEnabledFlow: Flow<Boolean> = dataStore.data.map { it[Keys.HEAD_TRACKING_ENABLED] ?: false }
+    val headTrackingSmoothingFlow: Flow<Float> = dataStore.data.map { it[Keys.HEAD_TRACKING_SMOOTHING] ?: 0.85f }
+    val surroundBassAngleFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_BASS_ANGLE] ?: 15f }
+    val surroundBassDistanceFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_BASS_DISTANCE] ?: 1.5f }
+    val surroundMidAngleFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_MID_ANGLE] ?: 25f }
+    val surroundMidDistanceFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_MID_DISTANCE] ?: 1.5f }
+    val surroundTrebleAngleFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_TREBLE_ANGLE] ?: 30f }
+    val surroundTrebleDistanceFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_TREBLE_DISTANCE] ?: 1.5f }
+    val surroundCrossoverBassMidFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_CROSSOVER_BASS_MID] ?: 250f }
+    val surroundCrossoverMidTrebleFlow: Flow<Float> = dataStore.data.map { it[Keys.SURROUND_CROSSOVER_MID_TREBLE] ?: 4000f }
 
     suspend fun setEqualizerViewMode(mode: EqualizerViewMode) =
         dataStore.edit { preferences ->
@@ -308,8 +322,8 @@ class EqualizerPreferencesRepository @Inject constructor(
 
     suspend fun setDynamicBassFilterY(low: Float, high: Float) =
         dataStore.edit { preferences ->
-            preferences[Keys.DYNAMIC_BASS_FILTER_Y_LOW] = low.coerceIn(40f, 400f)
-            preferences[Keys.DYNAMIC_BASS_FILTER_Y_HIGH] = high.coerceIn(10f, 200f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_Y_LOW] = low.coerceIn(10f, 200f)
+            preferences[Keys.DYNAMIC_BASS_FILTER_Y_HIGH] = high.coerceIn(40f, 400f)
         }
 
     suspend fun setDynamicBassSideGain(gx: Float, gy: Float) =
@@ -324,11 +338,39 @@ class EqualizerPreferencesRepository @Inject constructor(
             preferences[Keys.STEREO_WIDENER_ENABLED] = enabled
         }
 
+    suspend fun setStereoWidth(width: Float) =
+        dataStore.edit { it[Keys.STEREO_WIDTH] = width.coerceIn(0f, 2f) }
+
+    suspend fun setStereoBassProtectFreq(freq: Float) =
+        dataStore.edit { it[Keys.STEREO_BASS_PROTECT] = freq.coerceIn(20f, 500f) }
+        
     // SurroundSound setters
     suspend fun setSurroundEnabled(enabled: Boolean) =
         dataStore.edit { preferences ->
             preferences[Keys.SURROUND_ENABLED] = enabled
         }
+
+    suspend fun setHeadTrackingEnabled(enabled: Boolean) =
+        dataStore.edit { it[Keys.HEAD_TRACKING_ENABLED] = enabled }
+
+    suspend fun setHeadTrackingSmoothing(factor: Float) =
+        dataStore.edit { it[Keys.HEAD_TRACKING_SMOOTHING] = factor.coerceIn(0.1f, 1f) }
+
+    suspend fun setSurroundBassPlacement(angle: Float, distance: Float) = dataStore.edit {
+        it[Keys.SURROUND_BASS_ANGLE] = angle; it[Keys.SURROUND_BASS_DISTANCE] = distance
+    }
+
+    suspend fun setSurroundMidPlacement(angle: Float, distance: Float) = dataStore.edit {
+        it[Keys.SURROUND_MID_ANGLE] = angle; it[Keys.SURROUND_MID_DISTANCE] = distance
+    }
+
+    suspend fun setSurroundTreblePlacement(angle: Float, distance: Float) = dataStore.edit {
+        it[Keys.SURROUND_TREBLE_ANGLE] = angle; it[Keys.SURROUND_TREBLE_DISTANCE] = distance
+    }
+
+    suspend fun setSurroundCrossovers(bassMid: Float, midTreble: Float) = dataStore.edit {
+        it[Keys.SURROUND_CROSSOVER_BASS_MID] = bassMid; it[Keys.SURROUND_CROSSOVER_MID_TREBLE] = midTreble
+    }
 
     suspend fun saveCustomPreset(preset: EqualizerPreset) {
         val current = customPresetsFlow.first().toMutableList()
