@@ -48,6 +48,25 @@ class EqualizerPreferencesRepository @Inject constructor(
         val DYNAMIC_BASS_FILTER_Y_HIGH = floatPreferencesKey("dynamic_bass_filter_y_high")
         val DYNAMIC_BASS_SIDE_GAIN_X = floatPreferencesKey("dynamic_bass_side_gain_x")
         val DYNAMIC_BASS_SIDE_GAIN_Y = floatPreferencesKey("dynamic_bass_side_gain_y")
+
+        // StereoExpand keys
+        val STEREO_WIDENER_ENABLED = booleanPreferencesKey("stereo_widener_enabled")
+        val STEREO_WIDTH = floatPreferencesKey("stereo_width")        // 0.0 .. 2.0 (0–200%)
+        val STEREO_BASS_PROTECT = floatPreferencesKey("stereo_bass_protect") // Hz
+
+        // SurroundSound keys
+        val SURROUND_ENABLED = booleanPreferencesKey("surround_enabled")
+        val HEAD_TRACKING_ENABLED = booleanPreferencesKey("head_tracking_enabled")
+        val HEAD_TRACKING_SMOOTHING = floatPreferencesKey("head_tracking_smoothing") // 0.1..1.0
+
+        val SURROUND_BASS_ANGLE = floatPreferencesKey("surround_bass_angle")
+        val SURROUND_BASS_DISTANCE = floatPreferencesKey("surround_bass_distance")
+        val SURROUND_MID_ANGLE = floatPreferencesKey("surround_mid_angle")
+        val SURROUND_MID_DISTANCE = floatPreferencesKey("surround_mid_distance")
+        val SURROUND_TREBLE_ANGLE = floatPreferencesKey("surround_treble_angle")
+        val SURROUND_TREBLE_DISTANCE = floatPreferencesKey("surround_treble_distance")
+        val SURROUND_CROSSOVER_BASS_MID = floatPreferencesKey("surround_crossover_bass_mid")
+        val SURROUND_CROSSOVER_MID_TREBLE = floatPreferencesKey("surround_crossover_mid_treble")
     }
 
     val equalizerViewModeFlow: Flow<EqualizerViewMode> = dataStore.data.map { preferences ->
@@ -185,6 +204,16 @@ class EqualizerPreferencesRepository @Inject constructor(
         preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_Y] ?: 0f
     }
 
+    // StereoWidner flows
+    val stereoWidenerEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[Keys.STEREO_WIDENER_ENABLED] ?: false
+    }
+
+    // SurroundSound flows
+    val surroundEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[Keys.SURROUND_ENABLED] ?: false
+    }
+
     suspend fun setEqualizerViewMode(mode: EqualizerViewMode) =
         dataStore.edit { preferences ->
             preferences[Keys.VIEW_MODE] = mode.name
@@ -287,6 +316,18 @@ class EqualizerPreferencesRepository @Inject constructor(
         dataStore.edit { preferences ->
             preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_X] = gx.coerceIn(0f, 100f)
             preferences[Keys.DYNAMIC_BASS_SIDE_GAIN_Y] = gy.coerceIn(0f, 100f)
+        }
+
+    // StereoWidener setters
+    suspend fun setStereoWidenerEnabled(enabled: Boolean) =
+        dataStore.edit { preferences ->
+            preferences[Keys.STEREO_WIDENER_ENABLED] = enabled
+        }
+
+    // SurroundSound setters
+    suspend fun setSurroundEnabled(enabled: Boolean) =
+        dataStore.edit { preferences ->
+            preferences[Keys.SURROUND_ENABLED] = enabled
         }
 
     suspend fun saveCustomPreset(preset: EqualizerPreset) {
