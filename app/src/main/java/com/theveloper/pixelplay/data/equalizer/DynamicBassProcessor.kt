@@ -11,8 +11,10 @@ class DynamicBassProcessor : BaseAudioProcessor() {
 
     private var engine = DynamicBassEngine(44100f) // placeholder until real format arrives
     private var widener = StereoWidenerEngine(44100f)
+    private var surround = SurroundImagingEngine(44100f)
     private var isEnabled = true
     private var widenerEnabled = false
+    private var surroundEnabled = false
 
     // Cached values so they survive engine rebuilds in onConfigure().
     // These mirror the eel preset's own @init defaults (dBassGain=45, dX1=1200,
@@ -30,6 +32,13 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     // Stereo widener cached values.
     private var widthPercent = 100f // 100 = original image, unchanged
     private var bassProtectHz = 200f
+
+    // Surround imaging cached values.
+    private var headYawRad = 0f
+    private var bassAngleDeg = 15f; private var bassDistanceM = 1.5f
+    private var midAngleDeg = 25f; private var midDistanceM = 1.5f
+    private var trebleAngleDeg = 30f; private var trebleDistanceM = 1.5f
+    private var crossoverBassMidHz = 250f; private var crossoverMidTrebleHz = 4000f
 
     fun setEnabled(enabled: Boolean) { isEnabled = enabled }
 
@@ -67,21 +76,65 @@ class DynamicBassProcessor : BaseAudioProcessor() {
         widener.setBassProtectFrequency(freqHz)
     }
 
+    fun setSurroundEnabled(enabled: Boolean) { surroundEnabled = enabled }
+
+    /**
+     * Latest device heading in radians, relative to wherever HeadOrientationTracker was last
+     * calibrated. Call this from whatever owns the tracker (a Service/ViewModel) each time it
+     * reports a new yaw — this processor doesn't read sensors itself.
+     */
+    fun setHeadYaw(radians: Float) {
+        headYawRad = radians
+        surround.setHeadYaw(radians)
+    }
+
+    /** Calibrates where the "bass driver" of each channel sits: angleDegrees is the right
+     * channel's angle from the listener's forward direction (left mirrors automatically), and
+     * distanceMeters its distance. */
+    fun setBassPlacement(angleDegrees: Float, distanceMeters: Float) {
+        bassAngleDeg = angleDegrees; bassDistanceM = distanceMeters
+        surround.setBassPlacement(angleDegrees, distanceMeters)
+    }
+
+    fun setMidPlacement(angleDegrees: Float, distanceMeters: Float) {
+        midAngleDeg = angleDegrees; midDistanceM = distanceMeters
+        surround.setMidPlacement(angleDegrees, distanceMeters)
+    }
+
+    fun setTreblePlacement(angleDegrees: Float, distanceMeters: Float) {
+        trebleAngleDeg = angleDegrees; trebleDistanceM = distanceMeters
+        surround.setTreblePlacement(angleDegrees, distanceMeters)
+    }
+
+    fun setSurroundCrossoverFrequencies(bassMidHz: Float, midTrebleHz: Float) {
+        crossoverBassMidHz = bassMidHz; crossoverMidTrebleHz = midTrebleHz
+        surround.setCrossoverFrequencies(bassMidHz, midTrebleHz)
+    }
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
             // Unsupported format for this effect (e.g. mono, float/Hi-Fi output) —
             // become inactive instead of throwing and killing playback.
             return AudioProcessor.AudioFormat.NOT_SET
         }
-        engine = DynamicBassEngine(inputAudioFormat.sampleRate.toFloat()).apply {
+        val sampleRate = inputAudioFormat.sampleRate.toFloat()
+        engine = DynamicBassEngine(sampleRate).apply {
             setBassGain(bassGain)
             setFilterXPassFrequency(xLow, xHigh)
             setFilterYPassFrequency(yLow, yHigh)
             setSideGain(gx, gy)
         }
-        widener = StereoWidenerEngine(inputAudioFormat.sampleRate.toFloat()).apply {
+        widener = StereoWidenerEngine(sampleRate).apply {
             setWidth(widthPercent)
             setBassProtectFrequency(bassProtectHz)
+        }
+        surround = SurroundImagingEngine(sampleRate).apply {
+            setCrossoverFrequencies(crossoverBassMidHz, crossoverMidTrebleHz)
+            setBassPlacement(bassAngleDeg, bassDistanceM)
+            setMidPlacement(midAngleDeg, midDistanceM)
+            setTreblePlacement(trebleAngleDeg, trebleDistanceM)
+            setHeadYaw(headYawRad)
+            updateSpatialParameters()
         }
         return AudioProcessor.AudioFormat(
             inputAudioFormat.sampleRate,
@@ -105,13 +158,27 @@ class DynamicBassProcessor : BaseAudioProcessor() {
                 outputSamples.put(i, inputSamples.get(i))
             }
         } else {
-            for (i in 0 until frames) {
-                val left = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
-                val right = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
+            // Spatial parameters (ITD/ILD/head-shadow targets) are recomputed once per buffer,
+            // not per sample — head orientation changes at the sensor's update rate (tens of Hz
+            // at most), so this is inaudibly coarse while avoiding per-sample trig/exp cost.
+            if (surroundEnabled) surround.updateSpatialParameters()
 
-                engine.processSamples(left, right)
-                var sampleL = engine.getLeft()
-                var sampleR = engine.getRight()
+            for (i in 0 until frames) {
+                var sampleL = inputSamples.get(i * 2).toFloat() / Short.MAX_VALUE
+                var sampleR = inputSamples.get(i * 2 + 1).toFloat() / Short.MAX_VALUE
+
+                // Chain: spatialize the original program material first, then boost/shape bass
+                // on the (now-spatialized) result, then optionally widen. Each stage is a plain
+                // function call, so reordering later is just moving these blocks around.
+                if (surroundEnabled) {
+                    surround.processSamples(sampleL, sampleR)
+                    sampleL = surround.getLeft()
+                    sampleR = surround.getRight()
+                }
+
+                engine.processSamples(sampleL, sampleR)
+                sampleL = engine.getLeft()
+                sampleR = engine.getRight()
 
                 if (widenerEnabled) {
                     widener.process(sampleL, sampleR)
@@ -119,11 +186,10 @@ class DynamicBassProcessor : BaseAudioProcessor() {
                     sampleR = widener.getRight()
                 }
 
-                // DynamicBassEngine (and the widener, when enabled) apply their own
-                // scoped gain-reduction limiters internally, so this is just the
-                // float-to-int16 conversion. Round to nearest instead of truncating
-                // toward zero — truncation biases every sample toward zero, which
-                // adds a small but consistent quantization distortion.
+                // Every stage above applies its own scoped gain-reduction limiter internally,
+                // so this is just the float-to-int16 conversion. Round to nearest instead of
+                // truncating toward zero — truncation biases every sample toward zero, adding a
+                // small but consistent quantization distortion.
                 val outL = (sampleL * Short.MAX_VALUE).roundToInt()
                     .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                 val outR = (sampleR * Short.MAX_VALUE).roundToInt()
@@ -139,6 +205,7 @@ class DynamicBassProcessor : BaseAudioProcessor() {
         outputBuffer.flip() // CRITICAL: mark exactly the bytes written as valid/readable output
     }
 }
+
 
 
 
