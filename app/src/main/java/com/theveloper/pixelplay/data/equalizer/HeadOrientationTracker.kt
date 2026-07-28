@@ -53,6 +53,9 @@ class HeadOrientationTracker(
     // buffer), so smoothing costs nothing in responsiveness that actually matters, and tames
     // raw-magnetometer jitter noticeably.
     private val smoothing = 0.85f
+        set(value) {
+            field = value.coerceIn(0.1f, 1.0f)
+        }
 
     fun start() {
         accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
