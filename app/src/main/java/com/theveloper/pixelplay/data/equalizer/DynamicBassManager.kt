@@ -115,7 +115,9 @@ import javax.inject.Singleton
  * Integrates with ExoPlayer's audio pipeline
  */
 @Singleton
-class DynamicBassManager @Inject constructor() {
+class DynamicBassManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     companion object {
         private const val TAG = "DynamicBassManager"
@@ -167,7 +169,7 @@ class DynamicBassManager @Inject constructor() {
 
     // Called by MusicService to start tracking
     fun startHeadTracking(onYaw: (Float) -> Unit) {
-        headTracker?.stop()
+        stopHeadTracking()
         headTracker = HeadOrientationTracker(context) { yaw ->
             onYaw(yaw)
             // also forward to the processor if needed
