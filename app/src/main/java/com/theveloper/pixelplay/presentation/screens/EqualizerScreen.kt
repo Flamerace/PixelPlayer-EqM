@@ -371,11 +371,19 @@ fun EqualizerScreen(
                 )
             }
 
-            // DynamicBass Controls
+            // StereoExpand Controls
             item(key = "stereo_widener_controls") {
                 StereoControlsSection(
                     stereoWidenerEnabled = uiState.stereoWidenerEnabled,
                     onStereoWidenerEnabledChange = { equalizerViewModel.setStereoWidenerEnabled(it) }
+                )
+            }
+
+            // SurroundSound Controls
+            item(key = "surround_sound_controls") {
+                SurroundControlsSection(
+                    surroundEnabled = uiState.surroundEnabled,
+                    onSurroundEnabledChange = { equalizerViewModel.setSurroundEnabled(it) }
                 )
             }
 
@@ -2094,3 +2102,42 @@ private fun StereoControlsSection(
         }
     }
 }
+
+@Composable
+private fun SurroundControlsSection(
+    surroundEnabled: Boolean,
+    onSurroundEnabledChange: (Boolean) -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Surround Sound",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Switch(
+                    checked = surroundEnabled,
+                    onCheckedChange = onSurroundEnabledChange,
+                    modifier = Modifier.scale(0.8f)
+                )
+            }
+        }
+    }
+}
+
