@@ -419,7 +419,7 @@ class MusicService : MediaLibraryService() {
             }
         }
 
-        dynamicBassManager.startHeadTracking {}
+        //dynamicBassManager.startHeadTracking {}
         /*headTracker = HeadOrientationTracker(this) { yawRadians ->
             // Forward to the processor – safe even if processor is null
             dynamicBassManager.getProcessor()?.setHeadYaw(yawRadians)
