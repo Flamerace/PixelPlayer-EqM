@@ -1278,7 +1278,7 @@ class MusicService : MediaLibraryService() {
             syncLocalListeningStatsFromPlayer(player)
 
             if (isPlaying) {
-                haedTracker.start() 
+                headTracker.start() 
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
             } else {
