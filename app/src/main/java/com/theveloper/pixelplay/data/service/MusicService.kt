@@ -68,7 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.theveloper.pixelplay.data.equalizer.DynamicBassManager
-import com.theveloper.pixelplay.data.equalizer.HeadOrientationTracker
+//import com.theveloper.pixelplay.data.equalizer.HeadOrientationTracker
 import com.theveloper.pixelplay.data.equalizer.EqualizerManager
 import com.theveloper.pixelplay.data.model.WidgetThemeColors
 import com.theveloper.pixelplay.data.preferences.AlbumArtColorAccuracy
@@ -419,10 +419,14 @@ class MusicService : MediaLibraryService() {
             }
         }
 
-        headTracker = HeadOrientationTracker(this) { yawRadians ->
+        dynamicBassManager.startHeadTracking { yaw ->
+            // yaw is already forwarded to processor inside manager
+            // but you can also do additional logic here if needed
+        }
+        /*headTracker = HeadOrientationTracker(this) { yawRadians ->
             // Forward to the processor – safe even if processor is null
             dynamicBassManager.getProcessor()?.setHeadYaw(yawRadians)
-        }
+        }*/
 
         // A media-button startForegroundService() can reach MusicService directly (not always
         // through PixelPlayMediaButtonReceiver), so the pending counter is only a hint. Promote
@@ -1278,11 +1282,11 @@ class MusicService : MediaLibraryService() {
             syncLocalListeningStatsFromPlayer(player)
 
             if (isPlaying) {
-                headTracker.start() 
+                dynamicBassManager.startHeadTracking { ... }
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
             } else {
-                headTracker.stop() 
+                dynamicBassManager.stopHeadTracking()
                 val state = if (player.playbackState == Player.STATE_ENDED) "stopped" else "paused"
                 reportNavidromePlayback(state)
                 stopNavidromePlaybackReporting()
@@ -1503,7 +1507,7 @@ class MusicService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
-        headTracker.stop() 
+        dynamicBassManager.stopHeadTracking() 
         PlaybackActivityTracker.setPlaybackActive(false)
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
