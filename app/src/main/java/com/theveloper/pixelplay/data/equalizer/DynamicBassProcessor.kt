@@ -6,6 +6,9 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 import kotlin.math.roundToInt
+import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.max
 
 class DynamicBassProcessor : BaseAudioProcessor() {
 
@@ -15,6 +18,14 @@ class DynamicBassProcessor : BaseAudioProcessor() {
     private var isEnabled = true
     private var widenerEnabled = false
     private var surroundEnabled = true
+
+    // Envelope follower for the Dynamic Bass live meter. Written once per sample on the
+    // audio thread (one compare + one lerp — negligible next to the filtering already
+    // happening here); read from the UI thread via getBassActivityLevel(). A bare
+    // @Volatile Float is fine for a meter: last-writer-wins, no atomicity needed.
+    @Volatile private var bassActivityLevel = 0f
+    private var meterAttackCoeff = 0.9f
+    private var meterReleaseCoeff = 0.99f
 
     // Cached values so they survive engine rebuilds in onConfigure().
     // These mirror the eel preset's own @init defaults (dBassGain=45, dX1=1200,
@@ -111,6 +122,9 @@ class DynamicBassProcessor : BaseAudioProcessor() {
         surround.setCrossoverFrequencies(bassMidHz, midTrebleHz)
     }
 
+    /** Thread-safe snapshot (single Volatile read) of the current bass envelope, ~0f..1f. */
+    fun getBassActivityLevel(): Float = bassActivityLevel
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) {
             // Unsupported format for this effect (e.g. mono, float/Hi-Fi output) —
@@ -136,6 +150,10 @@ class DynamicBassProcessor : BaseAudioProcessor() {
             setHeadYaw(headYawRad)
             updateSpatialParameters()
         }
+        
+        meterAttackCoeff = exp(-1f / (sampleRate * 0.01f))  // ~10ms attack
+        meterReleaseCoeff = exp(-1f / (sampleRate * 0.3f))  // ~300ms release
+        
         return AudioProcessor.AudioFormat(
             inputAudioFormat.sampleRate,
             inputAudioFormat.channelCount,
@@ -177,6 +195,11 @@ class DynamicBassProcessor : BaseAudioProcessor() {
                 }
 
                 engine.processSamples(sampleL, sampleR)
+
+                val bassSample = max(abs(sampleL), abs(sampleR))
+                val meterCoeff = if (bassSample > bassActivityLevel) meterAttackCoeff else meterReleaseCoeff
+                bassActivityLevel = meterCoeff * bassActivityLevel + (1f - meterCoeff) * bassSample
+                
                 sampleL = engine.getLeft()
                 sampleR = engine.getRight()
 
