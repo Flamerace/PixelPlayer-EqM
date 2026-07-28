@@ -371,6 +371,14 @@ fun EqualizerScreen(
                 )
             }
 
+            // DynamicBass Controls
+            item(key = "stereo_widener_controls") {
+                StereoControlsSection(
+                    stereoWidenerEnabled = uiState.stereoWidenerEnabled,
+                    onStereoWidenerEnabledChange = { equalizerViewModel.setStereoWidenerEnabled(it) }
+                )
+            }
+
             // Volume Control
             item(key = "volume_control") {
                 val volume by equalizerViewModel.systemVolume.collectAsStateWithLifecycle()
@@ -2044,6 +2052,44 @@ private fun DynamicBassControlsSection(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StereoControlsSection(
+    stereoWidenerEnabled: Boolean,
+    onStereoWidenerEnabledChange: (Boolean) -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Stereo Expand",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Switch(
+                    checked = stereoWidenerEnabled,
+                    onCheckedChange = onStereoWidenerEnabledChange,
+                    modifier = Modifier.scale(0.8f)
+                )
             }
         }
     }
