@@ -493,6 +493,49 @@ class MusicService : MediaLibraryService() {
                 loudnessEnabled, loudnessStrength
             )
 
+            // Restore Dynamic Bass / Stereo / Surround into the DSP chain — these don't
+            // flow through equalizerManager.restoreState(), so they need their own push.
+            val dbEnabled = equalizerPreferencesRepository.dynamicBassEnabledFlow.first()
+            val dbGain = equalizerPreferencesRepository.dynamicBassBassGainFlow.first()
+            val dbFilterXLow = equalizerPreferencesRepository.dynamicBassFilterXLowFlow.first()
+            val dbFilterXHigh = equalizerPreferencesRepository.dynamicBassFilterXHighFlow.first()
+            val dbFilterYLow = equalizerPreferencesRepository.dynamicBassFilterYLowFlow.first()
+            val dbFilterYHigh = equalizerPreferencesRepository.dynamicBassFilterYHighFlow.first()
+            val dbSideGainX = equalizerPreferencesRepository.dynamicBassSideGainXFlow.first()
+            val dbSideGainY = equalizerPreferencesRepository.dynamicBassSideGainYFlow.first()
+            val stereoEnabled = equalizerPreferencesRepository.stereoWidenerEnabledFlow.first()
+            val stereoWidth = equalizerPreferencesRepository.stereoWidthFlow.first()
+            val stereoBassProtect = equalizerPreferencesRepository.stereoBassProtectFreqFlow.first()
+            val surroundOn = equalizerPreferencesRepository.surroundEnabledFlow.first()
+            val htEnabled = equalizerPreferencesRepository.headTrackingEnabledFlow.first()
+            val htSmoothing = equalizerPreferencesRepository.headTrackingSmoothingFlow.first()
+            val srBassAngle = equalizerPreferencesRepository.surroundBassAngleFlow.first()
+            val srBassDist = equalizerPreferencesRepository.surroundBassDistanceFlow.first()
+            val srMidAngle = equalizerPreferencesRepository.surroundMidAngleFlow.first()
+            val srMidDist = equalizerPreferencesRepository.surroundMidDistanceFlow.first()
+            val srTrebleAngle = equalizerPreferencesRepository.surroundTrebleAngleFlow.first()
+            val srTrebleDist = equalizerPreferencesRepository.surroundTrebleDistanceFlow.first()
+            val srCrossBM = equalizerPreferencesRepository.surroundCrossoverBassMidFlow.first()
+            val srCrossMT = equalizerPreferencesRepository.surroundCrossoverMidTrebleFlow.first()
+
+            dynamicBassManager.setEnabled(dbEnabled)
+            dynamicBassManager.setBassGain(dbGain)
+            dynamicBassManager.setFilterXPassFrequency(dbFilterXLow, dbFilterXHigh)
+            dynamicBassManager.setFilterYPassFrequency(dbFilterYLow, dbFilterYHigh)
+            dynamicBassManager.setSideGain(dbSideGainX, dbSideGainY)
+
+            dynamicBassManager.setStereoEnabled(stereoEnabled)
+            dynamicBassManager.setStereoWidth(stereoWidth * 100f) // manager API is percent-based
+            dynamicBassManager.setStereoBassProtectFrequency(stereoBassProtect)
+
+            dynamicBassManager.setSurroundEnabled(surroundOn)
+            dynamicBassManager.setHeadTrackingEnabled(htEnabled)
+            dynamicBassManager.setHeadTrackingSmoothing(htSmoothing)
+            dynamicBassManager.setSurroundBassPlacement(srBassAngle, srBassDist)
+            dynamicBassManager.setSurroundMidPlacement(srMidAngle, srMidDist)
+            dynamicBassManager.setSurroundTreblePlacement(srTrebleAngle, srTrebleDist)
+            dynamicBassManager.setSurroundCrossovers(srCrossBM, srCrossMT)
+
             val sessionId = engine.getAudioSessionId()
             if (sessionId != 0) {
                 equalizerManager.attachToAudioSessionIfNeeded(sessionId)
@@ -1279,7 +1322,7 @@ class MusicService : MediaLibraryService() {
             syncLocalListeningStatsFromPlayer(player)
 
             if (isPlaying) {
-                if (equalizerPreferencesRepository.headTrackingEnabledFlow.first()) dynamicBassManager.startHeadTracking {}
+                dynamicBassManager.startHeadTracking {}
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
             } else {
