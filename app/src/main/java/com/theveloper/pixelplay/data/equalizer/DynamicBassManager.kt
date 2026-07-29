@@ -195,8 +195,8 @@ class DynamicBassManager @Inject constructor(
     fun stopHeadTracking() {
         headTracker?.stop()
         headTracker = null
-        dynamicBassProcessor?.setHeadYaw(0)
-        _headYaw.value = 0
+        dynamicBassProcessor?.setHeadYaw(0f)
+        _headYaw.value = 0f
         trackingActive = false
     }
 
