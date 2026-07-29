@@ -700,7 +700,8 @@ class EqualizerViewModel @Inject constructor(
 
     fun setHeadTrackingEnabled(enabled: Boolean) {
         _uiState.update { it.copy(headTrackingEnabled = enabled) }
-        if (enabled) dynamicBassManager.startHeadTracking { } else dynamicBassManager.stopHeadTracking()
+        dynamicBassManager.setHeadTrackingEnabled(enabled)
+        //if (enabled) dynamicBassManager.startHeadTracking { } else dynamicBassManager.stopHeadTracking()
         viewModelScope.launch { equalizerPreferencesRepository.setHeadTrackingEnabled(enabled) }
     }
 
