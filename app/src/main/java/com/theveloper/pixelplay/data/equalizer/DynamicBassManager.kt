@@ -138,7 +138,8 @@ class DynamicBassManager @Inject constructor(
 
     private val _headTrackingEnabled = MutableStateFlow(false)
     val headTrackingEnabled: StateFlow<Boolean> = _headTrackingEnabled.asStateFlow()
-    
+    private var trackingActive = false
+
     private var headTrackingSmoothing = 0.85f
     
     // State flows for UI binding
@@ -178,21 +179,35 @@ class DynamicBassManager @Inject constructor(
     // Called by MusicService to start tracking
     fun startHeadTracking(onYaw: (Float) -> Unit) {
         stopHeadTracking()
-        _headTrackingEnabled.value = true
-        headTracker = HeadOrientationTracker(context) { yaw ->
-            _headYaw.value = yaw
-            onYaw(yaw)
-            dynamicBassProcessor?.setHeadYaw(yaw)
-        }.apply {
-            smoothing = headTrackingSmoothing
-            start()
+        if(_headTrackingEnabled.value) {
+            trackingActive = true
+             headTracker = HeadOrientationTracker(context) { yaw ->
+                 _headYaw.value = yaw
+                 onYaw(yaw)
+                 dynamicBassProcessor?.setHeadYaw(yaw)
+            }.apply {
+                 smoothing = headTrackingSmoothing
+                 start()
+            }
         }
     }
 
     fun stopHeadTracking() {
         headTracker?.stop()
         headTracker = null
-        _headTrackingEnabled.value = false
+        dynamicBassProcessor?.setHeadYaw(0)
+        _headYaw.value = 0
+        trackingActive = false
+    }
+
+    fun setHeadTrackingEnabled(enabled: Boolean) {
+        _headTrackingEnabled.value = enabled
+        if(!enabled) {
+            stopHeadTracking()
+        }
+        if(enabled && !trackingActive) {
+            startHeadTracking {}
+        }
     }
 
     fun setHeadTrackingSmoothing(factor: Float) {
