@@ -1279,7 +1279,7 @@ class MusicService : MediaLibraryService() {
             syncLocalListeningStatsFromPlayer(player)
 
             if (isPlaying) {
-                dynamicBassManager.startHeadTracking {}
+                if (equalizerPreferencesRepository.headTrackingEnabledFlow.first()) dynamicBassManager.startHeadTracking {}
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
             } else {
