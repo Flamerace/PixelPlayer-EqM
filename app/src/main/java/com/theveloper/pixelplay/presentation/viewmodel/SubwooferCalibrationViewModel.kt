@@ -88,7 +88,7 @@ class SubwooferCalibrationViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         measurements = points,
-                        frequencyIndex = if (it.frequencyIndex < points.size) it.frequencyIndex else firstMissing
+                        frequencyIndex = firstMissing
                     )
                 }
             }

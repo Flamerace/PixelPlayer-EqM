@@ -46,6 +46,7 @@ class SubwooferCalibrationProcessor(
 ) : BaseAudioProcessor() {
     private var sampleRateHz = 0
     private var channelCount = 0
+    private var inputEncoding = C.ENCODING_PCM_16BIT
     private var configuredProfile: SubwooferCalibrationProfile? = null
     private var channelFilters: Array<Array<PeakingFilter>> = emptyArray()
 
@@ -59,6 +60,7 @@ class SubwooferCalibrationProcessor(
         }
         sampleRateHz = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
+        inputEncoding = inputAudioFormat.encoding
         configureFilters(calibrationManager.activeProfileForCurrentVolume())
         return inputAudioFormat
     }
@@ -72,7 +74,7 @@ class SubwooferCalibrationProcessor(
         if (profile != configuredProfile) configureFilters(profile)
 
         val output = replaceOutputBuffer(byteCount).order(ByteOrder.nativeOrder())
-        when (inputAudioFormat.encoding) {
+        when (inputEncoding) {
             C.ENCODING_PCM_FLOAT -> processFloat(input, output)
             C.ENCODING_PCM_16BIT -> processPcm16(input, output)
             else -> {
