@@ -1,6 +1,8 @@
 package com.theveloper.pixelplay.data.service.player
 
 import com.theveloper.pixelplay.data.equalizer.DynamicBassManager
+import com.theveloper.pixelplay.data.equalizer.SubwooferCalibrationManager
+import com.theveloper.pixelplay.data.equalizer.SubwooferCalibrationProcessor
 
 import android.app.ActivityManager
 import android.content.Context
@@ -224,7 +226,8 @@ class DualPlayerEngine @Inject constructor(
     private val gdriveStreamProxy: com.theveloper.pixelplay.data.gdrive.GDriveStreamProxy,
     private val telegramCacheManager: com.theveloper.pixelplay.data.telegram.TelegramCacheManager,
     private val connectivityStateHolder: com.theveloper.pixelplay.presentation.viewmodel.ConnectivityStateHolder, 
-    private val dynamicBassManager: com.theveloper.pixelplay.data.equalizer.DynamicBassManager
+    private val dynamicBassManager: com.theveloper.pixelplay.data.equalizer.DynamicBassManager,
+    private val subwooferCalibrationManager: SubwooferCalibrationManager
 ) {
     private companion object {
         private const val AUDIO_OFFLOAD_STALL_FALLBACK_MS = 4_000L
@@ -1069,6 +1072,7 @@ class DualPlayerEngine @Inject constructor(
 
                 // 2. Add the dynamic bass processor (if present)
                 dynamicBassManager.getProcessor()?.let { processors.add(it) }
+                processors.add(SubwooferCalibrationProcessor(subwooferCalibrationManager))
                 
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(hiFiModeEnabled)
