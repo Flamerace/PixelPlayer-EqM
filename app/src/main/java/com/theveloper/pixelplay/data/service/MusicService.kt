@@ -70,6 +70,8 @@ import timber.log.Timber
 import com.theveloper.pixelplay.data.equalizer.DynamicBassManager
 import com.theveloper.pixelplay.data.equalizer.HeadOrientationTracker
 import com.theveloper.pixelplay.data.equalizer.EqualizerManager
+import com.theveloper.pixelplay.data.equalizer.SubwooferCalibrationManager
+import com.theveloper.pixelplay.data.preferences.SubwooferCalibrationPreferencesRepository
 import com.theveloper.pixelplay.data.model.WidgetThemeColors
 import com.theveloper.pixelplay.data.preferences.AlbumArtColorAccuracy
 import com.theveloper.pixelplay.data.preferences.AlbumArtPaletteStyle
@@ -157,6 +159,10 @@ class MusicService : MediaLibraryService() {
     lateinit var themePreferencesRepository: ThemePreferencesRepository
     @Inject
     lateinit var equalizerManager: EqualizerManager
+    @Inject
+    lateinit var subwooferCalibrationManager: SubwooferCalibrationManager
+    @Inject
+    lateinit var subwooferCalibrationPreferencesRepository: SubwooferCalibrationPreferencesRepository
     @Inject
     lateinit var colorSchemeProcessor: ColorSchemeProcessor
     @Inject
@@ -476,6 +482,14 @@ class MusicService : MediaLibraryService() {
         // Restore equalizer state from preferences and only attach audio effects when
         // the user actually has at least one effect enabled for the current session.
         serviceScope.launch {
+            val calibrationAudioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            val calibrationVolumeStep = calibrationAudioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+            val calibrationMaxVolumeStep = calibrationAudioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+            val calibrationProfile = subwooferCalibrationPreferencesRepository.profilesFlow.first()
+                .filter { it.volumeStep == calibrationVolumeStep && it.maxVolumeStep == calibrationMaxVolumeStep }
+                .maxByOrNull { it.updatedAtEpochMs }
+            subwooferCalibrationManager.setActiveProfile(calibrationProfile)
+
             val eqEnabled = equalizerPreferencesRepository.equalizerEnabledFlow.first()
             val presetName = equalizerPreferencesRepository.equalizerPresetFlow.first()
             val customBands = equalizerPreferencesRepository.equalizerCustomBandsFlow.first()

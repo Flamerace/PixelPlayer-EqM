@@ -57,6 +57,7 @@ import com.theveloper.pixelplay.presentation.screens.StatsScreen
 import com.theveloper.pixelplay.presentation.screens.SettingsScreen
 import com.theveloper.pixelplay.presentation.screens.SettingsCategoryScreen
 import com.theveloper.pixelplay.presentation.screens.EqualizerScreen
+import com.theveloper.pixelplay.presentation.screens.SubwooferCalibrationScreen
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.flow.first
@@ -456,6 +457,13 @@ fun AppNavigation(
                         navController = navController,
                         playerViewModel = playerViewModel
                     )
+                }
+            }
+            composable(
+                Screen.SubwooferCalibration.route,
+            ) {
+                ScreenWrapper(navController = navController, playerViewModel = playerViewModel, animatedVisibilityScope = this) {
+                    SubwooferCalibrationScreen(navController = navController)
                 }
             }
             composable(

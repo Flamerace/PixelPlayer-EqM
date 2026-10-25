@@ -136,6 +136,7 @@ import com.theveloper.pixelplay.presentation.components.SavePresetDialog
 import com.theveloper.pixelplay.presentation.components.RenamePresetDialog
 import com.theveloper.pixelplay.presentation.viewmodel.EqualizerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
+import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.utils.shapes.RoundedStarShape  // <- ensure this exists; if not, comment out and use CircleShape
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -295,6 +296,15 @@ fun EqualizerScreen(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            item(key = "subwoofer_calibration") {
+                TextButton(
+                    onClick = { navController.navigate(Screen.SubwooferCalibration.route) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Calibrate subwoofer")
+                }
+            }
+
             // Preset Tabs
             item(key = "preset_tabs") {
                 val visiblePresets = remember(uiState.accessiblePresets) {
